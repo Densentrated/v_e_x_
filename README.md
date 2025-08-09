@@ -1,3 +1,3 @@
 # v_e_x_
 
-remembers what you don't
+a chatbot that remembers what you won't
