@@ -1,0 +1,19 @@
+{
+  "textTabs": [
+    {
+      "tabLabel": "",
+      "value": "{{$('Notion').first().json.property_effective_contract_date.start}}",
+      "recipientId": "{{ $json.recipientFormData[1].recipientId }}"
+    },
+    {
+      "tabLabel": "Text 0c0cf18b-ce50-4b30-acd3-0df8e51f2cbd",
+      "value": "{{$('Notion').first().json.property_client_name}}",
+      "recipientId": "{{ $json.recipientFormData[1].recipientId }}"
+    },
+    {
+      "tabLabel": "{{ $json.formData[6] }}",
+      "value": "533 Nighthawk Pl, Virginia Beach VA 23451",
+      "recipientId": "{{ $json.recipientFormData[1].recipientId }}"
+    }
+  ]
+}
