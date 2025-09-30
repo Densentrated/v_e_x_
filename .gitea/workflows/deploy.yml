@@ -17,7 +17,13 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to VPS
+      - name: Copy files to VPS
+        run: |
+          rsync -avz --delete --exclude='.git' --exclude='.gitea' \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }}:~/server/
+
+      - name: Deploy on VPS
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ~/server && git pull origin main && podman prod -d"
+            "cd ~/server && podman prod -d"
