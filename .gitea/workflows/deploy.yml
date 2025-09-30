@@ -33,4 +33,4 @@ jobs:
       - name: Deploy on VPS
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ~/server && podman-compose --profile prod up -d"
+            "export PATH=\$HOME/.local/bin:\$PATH && cd ~/server && podman-compose --profile prod up -d"
