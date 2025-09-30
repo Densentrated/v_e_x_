@@ -23,7 +23,7 @@ jobs:
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} "mkdir -p ~/server"
 
           # Remove old files and copy new ones
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} "rm -rf ~/server/*"
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} "cd ~/server && rm -rf * .*[!.] 2>/dev/null || true"
 
           # Copy all files except .git and .gitea directories
           tar --exclude='.git' --exclude='.gitea' -czf - . | \
