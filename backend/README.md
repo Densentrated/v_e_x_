@@ -9,3 +9,4 @@ A simple Actix Web API server with a test endpoint.
 - Rust (latest stable version)
 - Cargo
 - Podman
+- Tokio
