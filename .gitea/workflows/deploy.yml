@@ -17,14 +17,18 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Install rsync
-        run: sudo apt-get update && sudo apt-get install -y rsync
-
       - name: Copy files to VPS
         run: |
-          rsync -avz --delete --exclude='.git' --exclude='.gitea' \
-            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }}:~/server/
+          # Create server directory on VPS if it doesn't exist
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} "mkdir -p ~/server"
+
+          # Remove old files and copy new ones
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} "rm -rf ~/server/*"
+
+          # Copy all files except .git and .gitea directories
+          tar --exclude='.git' --exclude='.gitea' -czf - . | \
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} \
+            "cd ~/server && tar -xzf -"
 
       - name: Deploy on VPS
         run: |
