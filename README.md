@@ -1,4 +1,4 @@
-V_E_X: A Chatbot that utilizes YOUR vectorized obsidian notes
+V_E_X: A Chatbot that utilizes YOUR vectorized obsidian notes, remembers what you don't
 
 # Dependencies
 
