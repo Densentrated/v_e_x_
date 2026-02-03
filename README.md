@@ -6,21 +6,13 @@ V_E_X: A Chatbot that utilizes YOUR vectorized obsidian notes, remembers what yo
 
 ### backend/database
 
-- Python 3
-- chromadb (installed in the backend/database Python virtual environment)up
-
-### backend/chromadb
-
-- Python 3
-- chromadb (installed in the backend/chromadb Python virtual environment)
+- go
+- lanceDB
 
 Setup:
 
 ```
-cd backend/chromadb
-python3 -m venv venv
-source venv/bin/activate
-pip install chromadb
+ new backend with lanceDB
 ```
 
 ## .env Variables
