@@ -1,4 +1,4 @@
-package storage
+package embedder
 
 import (
 	"bytes"
@@ -20,7 +20,7 @@ func (ve VoyageEmbedder) CreateChunks(filename string) ([]string, error) {
 
 	content := string(data)
 	var chunks []string
-	chunkSize := 24000
+	chunkSize := 3000
 	overlapSize := 1000
 
 	for i := 0; i < len(content); i += chunkSize - overlapSize {

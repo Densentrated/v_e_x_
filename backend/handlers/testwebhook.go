@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"vex-backend/storage"
+	"vex-backend/storage/embedder"
 )
 
 func TestHandler(w http.ResponseWriter, r *http.Request) {
-	embedder := storage.VoyageEmbedder{}
+	embedder := embedder.VoyageEmbedder{}
 	filename := "/home/dense/Projects/Gitea/v_e_x_/backend/~/Projects/Gitea/v_e_x_/NotesDir/techronomicon.git/Academia/Current Issues in Cities and Suburbs/Urban Segregation.md"
 	chunks, err := embedder.CreateChunks(filename)
 

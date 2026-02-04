@@ -11,10 +11,12 @@ import (
 )
 
 func main() {
+
 	// Initialize config ONCE at startup
 	if err := config.InitConfig(); err != nil {
 		log.Fatal(err)
 	}
+
 
 	fmt.Printf("Loaded config - Git User: %s, Clone Folder: %s\n", config.Config.GitUser, config.Config.CloneFolder)
 

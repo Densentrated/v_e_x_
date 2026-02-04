@@ -1,4 +1,4 @@
-package storage
+package embedder
 
 // Embed is an interface for embedding text chunks into vectors
 type Embedder interface {
