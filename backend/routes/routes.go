@@ -10,7 +10,7 @@ func RegisterRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/git-webhook", handlers.GitWebhookHandler)
-	// Add more routes here as needed
+	mux.HandleFunc("/test", handlers.TestHandler)
 
 	return mux
 }

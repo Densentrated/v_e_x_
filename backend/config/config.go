@@ -18,11 +18,12 @@ type Env map[string]string
 
 // EnvConfig holds the configuration loaded from .env file
 type EnvConfig struct {
-	ServerPort  string `env:"SERVER_PORT,required"`
-	GitUser     string `env:"GIT_USER,required"`
-	GitPAT      string `env:"GIT_PAT,required"`
-	CloneFolder string `env:"CLONE_FOLDER,required"`
-	NotesRepo   string `env:"NOTES_REPO,required"`
+	ServerPort   string `env:"SERVER_PORT,required"`
+	GitUser      string `env:"GIT_USER,required"`
+	GitPAT       string `env:"GIT_PAT,required"`
+	CloneFolder  string `env:"CLONE_FOLDER,required"`
+	NotesRepo    string `env:"NOTES_REPO,required"`
+	VoyageAPIKey string `env:"VOYAGE_API_KEY,required"`
 }
 
 // InitConfig loads and initializes the global config at startup
