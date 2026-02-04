@@ -91,15 +91,9 @@ func (ve VoyageEmbed) EmbedChunk(chunk string, metadata map[string]string) (vect
 		return vector.VectorData{}, fmt.Errorf("no embeddings returned")
 	}
 
-	// Convert float32 to int32 for the embedding field
-	embedding := make([]int32, len(embedResp.Data[0].Embedding))
-	for i, v := range embedResp.Data[0].Embedding {
-		embedding[i] = int32(v)
-	}
-
 	return vector.VectorData{
 		Data:      chunk,
 		MetaData:  metadata,
-		Embedding: embedding,
+		Embedding: embedResp.Data[0].Embedding,
 	}, nil
 }
