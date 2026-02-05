@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"vex-backend/vector"
-
 	"github.com/philippgille/chromem-go"
+
+	"vex-backend/vector"
+	"vex-backend/vector/embed"
 )
 
 // ChromaManager implements VectorManager using chromem-go
@@ -16,10 +17,10 @@ type ChromaManager struct {
 	db         *chromem.DB
 }
 
-// NewChromeManager creates a new ChromaManager (PUBLIC)
-func NewChromeManager(collection *chromem.Collection, db *chromem.DB) *ChromaManager {
+// NewChromeManager creates a new ChromaManager with the given embedder
+func NewChromeManager(collection *chromem.Collection, db *chromem.DB, embedder embed.VectorEmbed) *ChromaManager {
 	return &ChromaManager{
-		baseVectorManager: newBaseVectorManager(),
+		baseVectorManager: newBaseVectorManager(embedder),
 		collection:        collection,
 		db:                db,
 	}
@@ -40,7 +41,7 @@ func (cm *ChromaManager) StoreVectorInDB(ctx context.Context, vectorData vector.
 		ID:        vectorData.ID,
 		Content:   vectorData.Data,
 		Metadata:  vectorData.MetaData,
-		Embedding: vectorData.Embedding, // Can be nil, chromem-go will generate it
+		Embedding: vectorData.Embedding, // Can be nil if embedder will generate it
 	}
 
 	// Add document to collection with single thread (for single document)
@@ -52,20 +53,39 @@ func (cm *ChromaManager) StoreVectorInDB(ctx context.Context, vectorData vector.
 	return nil
 }
 
-// StoreFileAsVector uses vectorembed to convert a file into vectors and stores in DB
-func (cm *ChromaManager) StoreFileAsVector(ctx context.Context, filename string) error {
-	// TODO: Implement using your embedding logic from voyageembed.go
-	// 1. Read file
-	// 2. Create chunks using vectorEmbed interface
-	// 3. Embed each chunk
-	// 4. Store using StoreVectorInDB
-	return fmt.Errorf("not implemented")
+// StoreFileAsVector uses the embedder to convert a file into vectors and stores in DB
+func (cm *ChromaManager) StoreFileAsVector(ctx context.Context, filename string, metadata map[string]string) error {
+	if cm.embedder == nil {
+		return fmt.Errorf("embedder is not set")
+	}
+
+	// Use the embedder to embed the entire file
+	vectorDataList, err := cm.embedder.EmbedFile(ctx, filename, metadata)
+	if err != nil {
+		return fmt.Errorf("failed to embed file %s: %w", filename, err)
+	}
+
+	// Store each vector in the database
+	for i, vectorData := range vectorDataList {
+		if err := cm.StoreVectorInDB(ctx, vectorData); err != nil {
+			return fmt.Errorf("failed to store chunk %d from file %s: %w", i, filename, err)
+		}
+	}
+
+	return nil
 }
 
 // StoreFilesAsVectors stores multiple files as vectors
-func (cm *ChromaManager) StoreFilesAsVectors(ctx context.Context, files []string) error {
+func (cm *ChromaManager) StoreFilesAsVectors(ctx context.Context, files []string, metadata map[string]string) error {
 	for _, file := range files {
-		if err := cm.StoreFileAsVector(ctx, file); err != nil {
+		// Create file-specific metadata
+		fileMetadata := make(map[string]string)
+		for k, v := range metadata {
+			fileMetadata[k] = v
+		}
+		fileMetadata["filename"] = file
+
+		if err := cm.StoreFileAsVector(ctx, file, fileMetadata); err != nil {
 			return fmt.Errorf("failed to store file %s: %w", file, err)
 		}
 	}
@@ -74,6 +94,8 @@ func (cm *ChromaManager) StoreFilesAsVectors(ctx context.Context, files []string
 
 // RetrieveVectorWithMetaData retrieves vectors with specific metadata filters
 func (cm *ChromaManager) RetrieveVectorWithMetaData(ctx context.Context, metadata map[string]string) ([]QueryResult, error) {
+	// chromem-go doesn't have a direct "get by metadata" method, so we use Query with a dummy query
+	// We'll retrieve all and filter, or use the where clause in Query
 	results, err := cm.collection.Query(ctx, "", 1000, metadata, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve by metadata: %w", err)
@@ -82,9 +104,11 @@ func (cm *ChromaManager) RetrieveVectorWithMetaData(ctx context.Context, metadat
 	queryResults := make([]QueryResult, len(results))
 	for i, r := range results {
 		queryResults[i] = QueryResult{
-			ID:       r.ID,
-			Content:  r.Content,
-			Metadata: r.Metadata,
+			ID:         r.ID,
+			Content:    r.Content,
+			Metadata:   r.Metadata,
+			Embedding:  r.Embedding,
+			Similarity: r.Similarity,
 		}
 	}
 
@@ -92,9 +116,13 @@ func (cm *ChromaManager) RetrieveVectorWithMetaData(ctx context.Context, metadat
 }
 
 // RetrieveVectorWithEmbedding retrieves vectors similar to a given embedding
-func (cm *ChromaManager) RetrieveVectorWithEmbedding(ctx context.Context, embedding []float32) ([]QueryResult, error) {
+func (cm *ChromaManager) RetrieveVectorWithEmbedding(ctx context.Context, embedding []float32, nResults int) ([]QueryResult, error) {
+	if nResults <= 0 {
+		nResults = 10
+	}
+
 	// Use QueryEmbedding for embedding-based queries
-	results, err := cm.collection.QueryEmbedding(ctx, embedding, 10, nil, nil)
+	results, err := cm.collection.QueryEmbedding(ctx, embedding, nResults, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query by embedding: %w", err)
 	}
@@ -105,6 +133,7 @@ func (cm *ChromaManager) RetrieveVectorWithEmbedding(ctx context.Context, embedd
 			ID:         r.ID,
 			Content:    r.Content,
 			Metadata:   r.Metadata,
+			Embedding:  r.Embedding,
 			Similarity: r.Similarity,
 		}
 	}
@@ -113,35 +142,42 @@ func (cm *ChromaManager) RetrieveVectorWithEmbedding(ctx context.Context, embedd
 }
 
 // RetrieveVectorWithQuery retrieves vectors using a text query (semantic search)
+// Uses the embedder to convert the query text into an embedding
 func (cm *ChromaManager) RetrieveVectorWithQuery(ctx context.Context, query string, nResults int) ([]QueryResult, error) {
 	if query == "" {
 		return nil, fmt.Errorf("query cannot be empty")
 	}
 	if nResults <= 0 {
-		return nil, fmt.Errorf("nResults must be greater than 0")
+		nResults = 10
 	}
 
-	results, err := cm.collection.Query(ctx, query, nResults, nil, nil)
+	if cm.embedder == nil {
+		return nil, fmt.Errorf("embedder is not set, cannot embed query")
+	}
+
+	// Use the embedder to convert the query to an embedding
+	queryEmbedding, err := cm.embedder.EmbedText(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query vectors: %w", err)
+		return nil, fmt.Errorf("failed to embed query: %w", err)
 	}
 
-	queryResults := make([]QueryResult, len(results))
-	for i, r := range results {
-		queryResults[i] = QueryResult{
-			ID:         r.ID,
-			Content:    r.Content,
-			Metadata:   r.Metadata,
-			Similarity: r.Similarity,
-		}
-	}
-
-	return queryResults, nil
+	// Use the embedding to query the database
+	return cm.RetrieveVectorWithEmbedding(ctx, queryEmbedding, nResults)
 }
 
-// DeleteVectorsWithEmbedding deletes vectors similar to a given embedding
-func (cm *ChromaManager) DeleteVectorsWithEmbedding(ctx context.Context, embedding []float32) error {
-	return fmt.Errorf("not implemented for chromem-go: use DeleteVectorsWithMetaData instead")
+// DeleteVectorsWithIDs deletes vectors with the specified IDs
+func (cm *ChromaManager) DeleteVectorsWithIDs(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	// chromem-go's Delete signature: Delete(_ context.Context, where, whereDocument map[string]string, ids ...string) error
+	err := cm.collection.Delete(ctx, nil, nil, ids...)
+	if err != nil {
+		return fmt.Errorf("failed to delete vectors by IDs: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteVectorsWithMetaData deletes all vectors matching specific metadata
@@ -150,12 +186,14 @@ func (cm *ChromaManager) DeleteVectorsWithMetaData(ctx context.Context, metadata
 		return fmt.Errorf("metadata filter cannot be empty")
 	}
 
-	// Delete documents with the matching metadata
-	// chromem-go's Delete signature: Delete(_ context.Context, where, whereDocument map[string]string, ids ...string) error
+	// chromem-go's Delete can filter by metadata using the "where" parameter
 	err := cm.collection.Delete(ctx, metadata, nil)
 	if err != nil {
-		return fmt.Errorf("failed to delete vectors: %w", err)
+		return fmt.Errorf("failed to delete vectors by metadata: %w", err)
 	}
 
 	return nil
 }
+
+// Ensure ChromaManager implements VectorManager interface
+var _ VectorManager = (*ChromaManager)(nil)
