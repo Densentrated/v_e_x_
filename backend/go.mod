@@ -2,7 +2,10 @@ module vex-backend
 
 go 1.21.0
 
-require github.com/go-git/go-git/v5 v5.10.0
+require (
+	github.com/go-git/go-git/v5 v5.10.0
+	github.com/philippgille/chromem-go v0.7.0
+)
 
 require (
 	dario.cat/mergo v1.0.0 // indirect

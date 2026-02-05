@@ -17,6 +17,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// intialize vector database
 
 	fmt.Printf("Loaded config - Git User: %s, Clone Folder: %s\n", config.Config.GitUser, config.Config.CloneFolder)
 
