@@ -9,17 +9,33 @@ import (
 	"strings"
 	"time"
 
-	"vex-backend/db"
 	"vex-backend/vector"
+	"vex-backend/vector/manager"
 )
+
+var VectorManager manager.VectorManager
+
+// SetVectorManager allows injection of a VectorManager into this package (set from main or initialization code).
+func SetVectorManager(vm manager.VectorManager) {
+	VectorManager = vm
+}
 
 func TestHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 
 	// Files to process
 	files := []string{
+		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/Comparative Urbansim.md",
+		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/Contested Cities.md",
+		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/Deindustrialization and Financialization.md",
+		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/East End Overview.md",
+		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/Issues of Climate.md",
+		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/London's Globalization and Inequality.md",
+		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/Patterns of Inequality.md",
+		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/Patterns of Urbanism.md",
+		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/Space Overview.md",
 		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/Urban Segregation.md",
-		"/home/dense/Projects/Gitea/techronomicon/Analysis of Random Phenomena - Partitions and Total Probability.md",
+		"/home/dense/Projects/Gitea/techronomicon/Academia/Current Issues in Cities and Suburbs/World and Global Cities.md",
 	}
 
 	// Step 1: Embed files and store in vector database using VectorManager
@@ -32,7 +48,7 @@ func TestHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use StoreFilesAsVectors which handles chunking, embedding, and storage
-	err := db.VectorManager.StoreFilesAsVectors(ctx, files, baseMetadata)
+	err := VectorManager.StoreFilesAsVectors(ctx, files, baseMetadata)
 	if err != nil {
 		log.Printf("Error storing files: %v", err)
 		w.Header().Set("Content-Type", "text/plain")
@@ -45,7 +61,7 @@ func TestHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Report approximate document count tracked by the vector manager (if available).
 	// We use a minimal type assertion so we don't need to import the concrete manager type here.
-	if getter, ok := db.VectorManager.(interface{ GetDocCount() int64 }); ok {
+	if getter, ok := VectorManager.(interface{ GetDocCount() int64 }); ok {
 		docCount := getter.GetDocCount()
 		buf.WriteString(fmt.Sprintf("Collection document count (approx): %d\n\n", docCount))
 	}
@@ -54,8 +70,8 @@ func TestHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Querying vector database for ethnic enclaves information...")
 	buf.WriteString("Step 2: Querying database for ethnic enclaves information...\n\n")
 
-	query := "ethnic enclaves"
-	results, err := db.VectorManager.RetrieveVectorWithQuery(ctx, query, 5)
+	query := "information on ethnic enclaves in relation to modern cities"
+	results, err := VectorManager.RetrieveVectorWithQuery(ctx, query, 5)
 	if err != nil {
 		// Treat chromem-go nResults / collection-size errors as empty results rather than failing.
 		// This prevents the handler from returning a 500 when the collection simply has fewer documents
@@ -98,7 +114,7 @@ func TestHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Embed the summary using the embedder from VectorManager
-		embedding, err := db.VectorManager.GetEmbedder().EmbedText(ctx, summary)
+		embedding, err := VectorManager.GetEmbedder().EmbedText(ctx, summary)
 		if err != nil {
 			log.Printf("Error embedding query result %d: %v", i, err)
 			buf.WriteString(fmt.Sprintf("Error embedding query result %d: %v\n", i, err))
@@ -112,7 +128,7 @@ func TestHandler(w http.ResponseWriter, r *http.Request) {
 			Embedding: embedding,
 		}
 
-		err = db.VectorManager.StoreVectorInDB(ctx, resultVectorData)
+		err = VectorManager.StoreVectorInDB(ctx, resultVectorData)
 		if err != nil {
 			log.Printf("Error storing query result %d: %v", i, err)
 			buf.WriteString(fmt.Sprintf("Error storing query result %d: %v\n", i, err))

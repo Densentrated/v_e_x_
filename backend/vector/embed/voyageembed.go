@@ -22,7 +22,7 @@ type VoyageEmbed struct {
 // NewVoyageEmbed creates a new VoyageEmbed with default settings
 func NewVoyageEmbed() *VoyageEmbed {
 	return &VoyageEmbed{
-		Model: "voyage-3",
+		Model: "voyage-4",
 	}
 }
 
