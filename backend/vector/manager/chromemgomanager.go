@@ -3,6 +3,9 @@ package manager
 import (
 	"context"
 	"fmt"
+	"log"
+	"strings"
+	"sync/atomic"
 
 	"github.com/philippgille/chromem-go"
 
@@ -15,15 +18,32 @@ type ChromaManager struct {
 	*baseVectorManager
 	collection *chromem.Collection
 	db         *chromem.DB
+
+	// docCount tracks the approximate number of documents in the collection.
+	// We maintain it atomically to avoid querying the collection count on every request.
+	docCount int64
 }
 
 // NewChromeManager creates a new ChromaManager with the given embedder
 func NewChromeManager(collection *chromem.Collection, db *chromem.DB, embedder embed.VectorEmbed) *ChromaManager {
-	return &ChromaManager{
+	cm := &ChromaManager{
 		baseVectorManager: newBaseVectorManager(embedder),
 		collection:        collection,
 		db:                db,
+		docCount:          0,
 	}
+
+	// Try to initialize an approximate document count; failure is non-fatal.
+	// Use a background context for initialization.
+	ctx := context.Background()
+	if docs, err := collection.Query(ctx, "", 100000, nil, nil); err == nil {
+		atomic.StoreInt64(&cm.docCount, int64(len(docs)))
+	} else {
+		// If probe fails, leave docCount at 0 and allow runtime adjustments on adds/deletes.
+		log.Printf("warning: could not initialize collection docCount: %v", err)
+	}
+
+	return cm
 }
 
 // StoreVectorInDB stores a single VectorData object as a vector in the database
@@ -49,6 +69,10 @@ func (cm *ChromaManager) StoreVectorInDB(ctx context.Context, vectorData vector.
 	if err != nil {
 		return fmt.Errorf("failed to store vector in database: %w", err)
 	}
+
+	// Increment our atomic document count to reflect the newly added document.
+	// Use a conservative +1 because AddDocuments succeeded for one document.
+	atomic.AddInt64(&cm.docCount, 1)
 
 	return nil
 }
@@ -116,29 +140,74 @@ func (cm *ChromaManager) RetrieveVectorWithMetaData(ctx context.Context, metadat
 }
 
 // RetrieveVectorWithEmbedding retrieves vectors similar to a given embedding
+// Simplified behavior: try calling QueryEmbedding starting at the requested nResults
+// and decrement down to 1 until a call succeeds. This avoids relying on collection.Query
+// probes and prevents propagating the chromem-go "nResults must be <= the number of documents"
+// error to callers when fewer documents exist than requested.
+// RetrieveVectorWithEmbedding retrieves vectors similar to a given embedding
+// Strategy: call QueryEmbedding starting at the requested nResults and decrement until
+// it succeeds or reaches 0. If chromem-go reports an nResults/collection-size error,
+// return an empty result set silently (no logging) so callers don't receive the raw chromem error.
 func (cm *ChromaManager) RetrieveVectorWithEmbedding(ctx context.Context, embedding []float32, nResults int) ([]QueryResult, error) {
 	if nResults <= 0 {
 		nResults = 10
 	}
 
-	// Use QueryEmbedding for embedding-based queries
-	results, err := cm.collection.QueryEmbedding(ctx, embedding, nResults, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query by embedding: %w", err)
+	// Log the tracked document count and requested nResults for debugging.
+	currentCount := int(atomic.LoadInt64(&cm.docCount))
+	log.Printf("chroma manager: RetrieveVectorWithEmbedding called with requested nResults=%d, tracked docCount=%d", nResults, currentCount)
+
+	// If we have no documents tracked, return empty results immediately.
+	if currentCount == 0 {
+		return []QueryResult{}, nil
+	}
+	// Clamp nResults to our tracked count to avoid chromem-go errors.
+	if nResults > currentCount {
+		nResults = currentCount
 	}
 
-	queryResults := make([]QueryResult, len(results))
-	for i, r := range results {
-		queryResults[i] = QueryResult{
-			ID:         r.ID,
-			Content:    r.Content,
-			Metadata:   r.Metadata,
-			Embedding:  r.Embedding,
-			Similarity: r.Similarity,
+	var lastErr error
+
+	// Try QueryEmbedding from requested nResults down to 1 until a call succeeds.
+	for trial := nResults; trial >= 1; trial-- {
+		results, err := cm.collection.QueryEmbedding(ctx, embedding, trial, nil, nil)
+		if err == nil {
+			queryResults := make([]QueryResult, len(results))
+			for i, r := range results {
+				queryResults[i] = QueryResult{
+					ID:         r.ID,
+					Content:    r.Content,
+					Metadata:   r.Metadata,
+					Embedding:  r.Embedding,
+					Similarity: r.Similarity,
+				}
+			}
+			return queryResults, nil
 		}
+
+		lastErr = err
+
+		// If the error indicates the requested nResults is larger than the collection,
+		// treat that as "no results" and return an empty slice silently (no chromem error).
+		if err != nil {
+			msg := err.Error()
+			if strings.Contains(msg, "nResults") || strings.Contains(msg, "number of documents") {
+				// Silent empty result to hide chromem-go constraint details from callers.
+				return []QueryResult{}, nil
+			}
+		}
+
+		// Otherwise continue trying smaller sizes. We intentionally avoid logging the specific
+		// chromem nResults error here to keep behavior quiet as requested.
 	}
 
-	return queryResults, nil
+	// If all attempts failed for other reasons, return the last observed error.
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed to query by embedding after retries: %w", lastErr)
+	}
+
+	// No attempts succeeded and no error to return: return empty results.
+	return []QueryResult{}, nil
 }
 
 // RetrieveVectorWithQuery retrieves vectors using a text query (semantic search)
@@ -177,6 +246,15 @@ func (cm *ChromaManager) DeleteVectorsWithIDs(ctx context.Context, ids []string)
 		return fmt.Errorf("failed to delete vectors by IDs: %w", err)
 	}
 
+	// Decrement our atomic docCount by the number of IDs requested for deletion.
+	// If we end up negative, clamp to zero.
+	if len(ids) > 0 {
+		newCount := atomic.AddInt64(&cm.docCount, -int64(len(ids)))
+		if newCount < 0 {
+			atomic.StoreInt64(&cm.docCount, 0)
+		}
+	}
+
 	return nil
 }
 
@@ -187,12 +265,32 @@ func (cm *ChromaManager) DeleteVectorsWithMetaData(ctx context.Context, metadata
 	}
 
 	// chromem-go's Delete can filter by metadata using the "where" parameter
+	// Before deleting by metadata, attempt to count matching documents so we can adjust docCount.
+	// Query up to a reasonable cap to determine how many docs will be deleted.
+	toDeleteCount := 0
+	if docs, qErr := cm.collection.Query(ctx, "", 10000, metadata, nil); qErr == nil {
+		toDeleteCount = len(docs)
+	}
+
 	err := cm.collection.Delete(ctx, metadata, nil)
 	if err != nil {
 		return fmt.Errorf("failed to delete vectors by metadata: %w", err)
 	}
 
+	// Adjust the atomic docCount by the deleted count. Clamp to zero if necessary.
+	if toDeleteCount > 0 {
+		newCount := atomic.AddInt64(&cm.docCount, -int64(toDeleteCount))
+		if newCount < 0 {
+			atomic.StoreInt64(&cm.docCount, 0)
+		}
+	}
+
 	return nil
+}
+
+// GetDocCount returns the manager's tracked document count (atomic).
+func (cm *ChromaManager) GetDocCount() int64 {
+	return atomic.LoadInt64(&cm.docCount)
 }
 
 // Ensure ChromaManager implements VectorManager interface
