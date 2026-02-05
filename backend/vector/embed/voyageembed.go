@@ -21,8 +21,8 @@ func (ve VoyageEmbed) CreateChunks(filename string) ([]string, error) {
 
 	content := string(data)
 	var chunks []string
-	chunkSize := 3000
-	overlapSize := 1000
+	chunkSize := 12000
+	overlapSize := 2400
 
 	for i := 0; i < len(content); i += chunkSize - overlapSize {
 		end := i + chunkSize

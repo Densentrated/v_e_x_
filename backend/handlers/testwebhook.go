@@ -1,40 +1,148 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"time"
+
+	"vex-backend/db"
+	"vex-backend/vector"
 	"vex-backend/vector/embed"
 )
 
 func TestHandler(w http.ResponseWriter, r *http.Request) {
-	embedder := embed.VoyageEmbed{}
-	filename := "/home/dense/Projects/Gitea/v_e_x_/NotesDir/techronomicon.git/Academia/Current Issues in Cities and Suburbs/Urban Segregation.md"
-	chunks, err := embedder.CreateChunks(filename)
+	ctx := context.Background()
 
-	if err != nil {
-		log.Printf("error creating chunks: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Error creating chunk: %v", err)))
-		return
+	// Initialize embedder
+	embedder := embed.VoyageEmbed{}
+
+	// Files to process
+	files := []string{
+		"/home/dense/Projects/Gitea/v_e_x_/NotesDir/techronomicon.git/Academia/Current Issues in Cities and Suburbs/Urban Segregation.md",
+		"/home/dense/Projects/Gitea/v_e_x_/backend/~/Projects/Gitea/v_e_x_/NotesDir/techronomicon.git/Academia/United States History/APUSH Chapter 8.md",
+		"/home/dense/Projects/Gitea/v_e_x_/backend/~/Projects/Gitea/v_e_x_/NotesDir/techronomicon.git/Academia/First Year Writing/ENGW1111 Notes 1.md",
 	}
 
-	log.Printf("created %d chunks", len(chunks))
+	// Step 1: Embed files and store in vector database
+	log.Println("Starting file embedding and storage process...")
+	w.Write([]byte("Step 1: Embedding files and storing in database...\n\n"))
 
-	if len(chunks) > 0 {
-		metadata := map[string]string{
-			"filename": filename,
-		}
-		vectorData, err := embedder.EmbedChunk(chunks[0], metadata)
+	var totalChunksStored int
+	var totalErrors int
+
+	for _, filename := range files {
+		log.Printf("Processing file: %s", filename)
+
+		// Create chunks from file
+		chunks, err := embedder.CreateChunks(filename)
 		if err != nil {
-			log.Printf("Error embedding chunk: %v", err)
+			log.Printf("error creating chunks for %s: %v", filename, err)
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Error embedding chunk: %v", err)))
+			w.Write([]byte(fmt.Sprintf("Error creating chunks for %s: %v\n", filename, err)))
 			return
 		}
 
-		output := fmt.Sprintf("Successfully embedded chunk! Vector size: %d dimensions\nFirst 5 values: %v\n", len(vectorData.Embedding), vectorData.Embedding[:5])
-		log.Print(output)
-		w.Write([]byte(output))
+		log.Printf("created %d chunks from %s", len(chunks), filename)
+		w.Write([]byte(fmt.Sprintf("Created %d chunks from file: %s\n", len(chunks), filename)))
+
+		// Embed and store each chunk
+		for i, chunk := range chunks {
+			metadata := map[string]string{
+				"filename":    filename,
+				"chunk_index": fmt.Sprintf("%d", i),
+				"source":      "academic_notes",
+			}
+
+			// Embed the chunk
+			vectorData, err := embedder.EmbedChunk(chunk, metadata)
+			if err != nil {
+				log.Printf("Error embedding chunk %d: %v", i, err)
+				totalErrors++
+				continue
+			}
+
+			// Add unique ID to vector data
+			vectorData.ID = fmt.Sprintf("%s_chunk_%d_%d", filename, i, time.Now().UnixNano())
+
+			// Store in vector database using global VectorManager
+			err = db.VectorManager.StoreVectorInDB(ctx, vectorData)
+			if err != nil {
+				log.Printf("Error storing vector: %v", err)
+				totalErrors++
+				continue
+			}
+
+			totalChunksStored++
+			log.Printf("Successfully stored chunk %d (Vector size: %d dimensions)", i, len(vectorData.Embedding))
+		}
+
+		w.Write([]byte(fmt.Sprintf("Successfully embedded and stored chunks from: %s\n\n", filename)))
 	}
+
+	// Step 2: Query the vector database for information on ethnic enclaves
+	log.Println("Querying vector database for ethnic enclaves information...")
+	w.Write([]byte("Step 2: Querying database for ethnic enclaves information...\n\n"))
+
+	query := "ethnic enclaves"
+	results, err := db.VectorManager.RetrieveVectorWithQuery(ctx, query, 5)
+	if err != nil {
+		log.Printf("Error querying vector database: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Error querying vector database: %v\n", err)))
+		return
+	}
+
+	log.Printf("Found %d results for query '%s'", len(results), query)
+	w.Write([]byte(fmt.Sprintf("Found %d results for query '%s':\n\n", len(results), query)))
+
+	// Step 3: Store query results back into the vector database
+	log.Println("Storing query results back into vector database...")
+	w.Write([]byte("Step 3: Storing query results...\n\n"))
+
+	for i, result := range results {
+		// Create a summary of the result
+		contentPreview := result.Content
+		if len(contentPreview) > 100 {
+			contentPreview = contentPreview[:100] + "..."
+		}
+		summary := fmt.Sprintf("Query result for '%s': %s (similarity: %.4f)", query, contentPreview, result.Similarity)
+
+		resultMetadata := map[string]string{
+			"query":        query,
+			"result_index": fmt.Sprintf("%d", i),
+			"original_id":  result.ID,
+			"similarity":   fmt.Sprintf("%.4f", result.Similarity),
+			"source":       "query_result",
+		}
+
+		resultVectorData := vector.VectorData{
+			ID:       fmt.Sprintf("query_result_%s_%d_%d", query, i, time.Now().UnixNano()),
+			Data:     summary,
+			MetaData: resultMetadata,
+			// Note: Embedding will be auto-generated by chromem-go
+		}
+
+		err := db.VectorManager.StoreVectorInDB(ctx, resultVectorData)
+		if err != nil {
+			log.Printf("Error storing query result %d: %v", i, err)
+			totalErrors++
+			w.Write([]byte(fmt.Sprintf("Error storing query result %d: %v\n", i, err)))
+			continue
+		}
+
+		log.Printf("Stored query result %d", i)
+		w.Write([]byte(fmt.Sprintf("Result %d - ID: %s, Similarity: %.4f\n", i+1, result.ID, result.Similarity)))
+		if len(result.Content) > 150 {
+			w.Write([]byte(fmt.Sprintf("  Content: %s...\n\n", result.Content[:150])))
+		} else {
+			w.Write([]byte(fmt.Sprintf("  Content: %s\n\n", result.Content)))
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	summary := fmt.Sprintf("\n✅ Test completed successfully!\n\nSummary:\n- Total chunks stored: %d\n- Total errors: %d\n- Query results stored: %d\n", totalChunksStored, totalErrors, len(results))
+	w.Write([]byte(summary))
+	log.Println("Test handler completed successfully")
 }

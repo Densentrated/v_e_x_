@@ -7,19 +7,22 @@ import (
 	"time"
 
 	"vex-backend/config"
+	"vex-backend/db"
 	"vex-backend/routes"
 )
 
 func main() {
-
 	// Initialize config ONCE at startup
 	if err := config.InitConfig(); err != nil {
 		log.Fatal(err)
 	}
 
-	// intialize vector database
-
 	fmt.Printf("Loaded config - Git User: %s, Clone Folder: %s\n", config.Config.GitUser, config.Config.CloneFolder)
+
+	// Initialize vector database
+	if err := db.InitVectorDB(); err != nil {
+		log.Fatal("Failed to initialize vector database:", err)
+	}
 
 	mux := routes.RegisterRoutes()
 
