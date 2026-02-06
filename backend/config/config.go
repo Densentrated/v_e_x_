@@ -25,8 +25,8 @@ type EnvConfig struct {
 	NotesRepo             string `env:"NOTES_REPO,required"`
 	VoyageAPIKey          string `env:"VOYAGE_API_KEY,required"`
 	OpenAiAPIKey          string `env:"OPENAI_API_KEY,required"`
-	VectorStorageFolder   string `env:"VECTOR_STORAGE_FOLDER"`
-	HardCodedAPIKeyForNow string `env:"HARD_CODED_API_KEY"`
+	VectorStorageFolder   string `env:"VECTOR_STORAGE_FOLDER,required"`
+	HardCodedAPIKeyForNow string `env:"HARD_CODED_API_KEY,required"`
 }
 
 // InitConfig loads and initializes the global config at startup
