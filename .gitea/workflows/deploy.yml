@@ -35,6 +35,9 @@ jobs:
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             cd ~/server
 
+            # Add podman to PATH for non-interactive shells
+            export PATH="$HOME/.local/bin:$PATH"
+
             echo "=== Setting up production environment variables ==="
 
             # Export all required environment variables from secrets
@@ -103,6 +106,9 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             cd ~/server
+
+            # Add podman to PATH for non-interactive shells
+            export PATH="$HOME/.local/bin:$PATH"
 
             echo "=== Final deployment verification ==="
             echo "Container status:"
