@@ -32,37 +32,30 @@ jobs:
 
       - name: Build and Deploy on VPS
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} 'bash -l -c "
             cd ~/server
 
-            # Setup shell environment for non-interactive shells
-            echo "=== Shell Environment Debug ==="
-            echo "Current shell: $0"
-            echo "Original PATH: $PATH"
+            echo \"=== Shell Environment Debug ===\"
+            echo \"Current shell: \$0\"
+            echo \"PATH: \$PATH\"
 
-            export PATH="$HOME/.local/bin:$PATH"
-
-            # Source .zshenv if it exists (zsh users)
-            if [ -f "$HOME/.zshenv" ]; then
-              echo "Sourcing .zshenv"
-              source "$HOME/.zshenv"
-            fi
-
-            # Source .profile if it exists (fallback)
-            if [ -f "$HOME/.profile" ]; then
-              echo "Sourcing .profile"
-              source "$HOME/.profile"
-            fi
-
-            echo "Final PATH: $PATH"
-            echo "Podman location: $(which podman 2>/dev/null || echo 'not found')"
-            echo "Podman-compose location: $(which podman-compose 2>/dev/null || echo 'not found')"
-            echo ""
+            # Verify environment variables are accessible
+            echo \"\"
+            echo \"=== Checking environment variables ===\"
+            echo \"SERVER_PORT: \$SERVER_PORT\"
+            echo \"GIT_USER: \$GIT_USER\"
+            echo \"CLONE_FOLDER: \$CLONE_FOLDER\"
+            echo \"VECTOR_STORAGE_FOLDER: \$VECTOR_STORAGE_FOLDER\"
+            echo \"NOTES_REPO: \${NOTES_REPO:+[SET]}\"
+            echo \"GIT_PAT: \${GIT_PAT:+[SET]}\"
+            echo \"VOYAGE_API_KEY: \${VOYAGE_API_KEY:+[SET]}\"
+            echo \"OPENAI_API_KEY: \${OPENAI_API_KEY:+[SET]}\"
 
             # Detect system architecture for Go build
-            echo "=== Architecture Detection ==="
-            ARCH=$(uname -m)
-            case $ARCH in
+            echo \"\"
+            echo \"=== Architecture Detection ===\"
+            ARCH=\$(uname -m)
+            case \$ARCH in
               x86_64)
                 export TARGETARCH=amd64
                 ;;
@@ -74,109 +67,81 @@ jobs:
                 ;;
               *)
                 export TARGETARCH=amd64
-                echo "Unknown architecture $ARCH, defaulting to amd64"
+                echo \"Unknown architecture \$ARCH, defaulting to amd64\"
                 ;;
             esac
-            echo "System architecture: $ARCH"
-            echo "Target Go architecture: $TARGETARCH"
-            echo ""
+            echo \"System architecture: \$ARCH\"
+            echo \"Target Go architecture: \$TARGETARCH\"
 
-            echo "=== Setting up production environment variables ==="
+            # Set defaults for optional variables if not set
+            export CLONE_FOLDER=\"\${CLONE_FOLDER:-/app/clone}\"
+            export VECTOR_STORAGE_FOLDER=\"\${VECTOR_STORAGE_FOLDER:-/app/vectors}\"
+            export SERVER_PORT=\"\${SERVER_PORT:-22010}\"
 
-            # Export all required environment variables from secrets
-            export SERVER_PORT="${{ secrets.SERVER_PORT || '22010' }}"
-            export GIT_USER="${{ secrets.GIT_USER }}"
-            export GIT_PAT="${{ secrets.GIT_PAT }}"
-            export CLONE_FOLDER="/app/clone"
-            export NOTES_REPO="${{ secrets.NOTES_REPO }}"
-            export VOYAGE_API_KEY="${{ secrets.VOYAGE_API_KEY }}"
-            export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
-            export VECTOR_STORAGE_FOLDER="/app/vectors"
-            export HARD_CODED_API_KEY="${{ secrets.HARD_CODED_API_KEY }}"
-
-            echo "Environment variables configured for production"
-            echo "SERVER_PORT: $SERVER_PORT"
-            echo "GIT_USER: $GIT_USER"
-            echo "CLONE_FOLDER: $CLONE_FOLDER"
-            echo "VECTOR_STORAGE_FOLDER: $VECTOR_STORAGE_FOLDER"
-
-            echo ""
-            echo "=== Stopping existing containers ==="
+            echo \"\"
+            echo \"=== Stopping existing containers ===\"
             podman-compose -f podman-compose.prod.yml down 2>/dev/null || true
 
             # Clean up old containers and images
-            echo "Cleaning up old images..."
+            echo \"Cleaning up old images...\"
             podman container prune -f || true
             podman image prune -f || true
 
-            echo ""
-            echo "=== Building and starting containers ==="
+            echo \"\"
+            echo \"=== Building and starting containers ===\"
             podman-compose -f podman-compose.prod.yml up -d --build
 
-            echo ""
-            echo "=== Waiting for services to start ==="
+            echo \"\"
+            echo \"=== Waiting for services to start ===\"
             sleep 10
 
-            echo ""
-            echo "=== Checking deployment status ==="
-            if podman-compose -f podman-compose.prod.yml ps | grep -q "Up"; then
-              echo "✅ Deployment successful - containers are running"
+            echo \"\"
+            echo \"=== Checking deployment status ===\"
+            if podman-compose -f podman-compose.prod.yml ps | grep -q \"Up\"; then
+              echo \"✅ Deployment successful - containers are running\"
               podman-compose -f podman-compose.prod.yml ps
             else
-              echo "❌ Deployment failed - containers not running"
-              echo "Container logs:"
-              podman-compose -f podman-compose.prod.yml logs vex-backend || echo "No logs available"
+              echo \"❌ Deployment failed - containers not running\"
+              echo \"Container logs:\"
+              podman-compose -f podman-compose.prod.yml logs vex-backend || echo \"No logs available\"
               exit 1
             fi
 
-            echo ""
-            echo "=== Health check ==="
-            for i in {1..30}; do
-              if curl -f -s "http://localhost:$SERVER_PORT/health" > /dev/null 2>&1; then
-                echo "✅ Health check passed - application is ready"
-                echo "🚀 Application deployed successfully at http://localhost:$SERVER_PORT"
+            echo \"\"
+            echo \"=== Health check ===\"
+            for i in \$(seq 1 30); do
+              if curl -f -s \"http://localhost:\$SERVER_PORT/health\" > /dev/null 2>&1; then
+                echo \"✅ Health check passed - application is ready\"
+                echo \"🚀 Application deployed successfully at http://localhost:\$SERVER_PORT\"
                 exit 0
               fi
-              echo "Health check attempt $i/30 - waiting..."
+              echo \"Health check attempt \$i/30 - waiting...\"
               sleep 2
             done
 
-            echo "⚠️  Health check timeout - check application logs"
+            echo \"⚠️  Health check timeout - check application logs\"
             podman-compose -f podman-compose.prod.yml logs --tail=50 vex-backend
-          EOF
+          "'
 
       - name: Verify deployment
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} 'bash -l -c "
             cd ~/server
 
-            # Setup shell environment for non-interactive shells
-            export PATH="$HOME/.local/bin:$PATH"
-
-            # Source .zshenv if it exists (zsh users)
-            if [ -f "$HOME/.zshenv" ]; then
-              source "$HOME/.zshenv"
-            fi
-
-            # Source .profile if it exists (fallback)
-            if [ -f "$HOME/.profile" ]; then
-              source "$HOME/.profile"
-            fi
-
-            echo "=== Final deployment verification ==="
-            echo "Container status:"
+            echo \"=== Final deployment verification ===\"
+            echo \"Container status:\"
             podman-compose -f podman-compose.prod.yml ps
 
-            echo ""
-            echo "Recent application logs:"
+            echo \"\"
+            echo \"Recent application logs:\"
             podman-compose -f podman-compose.prod.yml logs --tail=20 vex-backend
 
-            echo ""
-            echo "=== Deployment Summary ==="
-            if podman-compose -f podman-compose.prod.yml ps | grep -q "Up"; then
-              echo "✅ Success - VEX application is running"
+            echo \"\"
+            echo \"=== Deployment Summary ===\"
+            if podman-compose -f podman-compose.prod.yml ps | grep -q \"Up\"; then
+              echo \"✅ Success - VEX application is running\"
             else
-              echo "❌ Failure - VEX application is not running"
+              echo \"❌ Failure - VEX application is not running\"
               exit 1
             fi
-          EOF
+          "'
