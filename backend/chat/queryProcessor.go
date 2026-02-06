@@ -54,6 +54,7 @@ Instructions:
 - Be accurate and don't make up information not present in the context
 - Format your response clearly and helpfully
 - You can reference specific documents if helpful
+- If you are going to use math equations, make sure to put like so $${math}$$ or ${math}$, this way the formatting will be done correctly
 
 Context:
 ` + context
