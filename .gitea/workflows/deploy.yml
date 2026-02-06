@@ -35,43 +35,89 @@ jobs:
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             cd ~/server
 
-            # Load environment variables
-            export PATH=$HOME/.local/bin:$PATH
+            echo "=== Setting up production environment variables ==="
 
-            # Stop existing containers
-            echo "Stopping existing containers..."
-            podman-compose down || true
+            # Export all required environment variables from secrets
+            export SERVER_PORT="${{ secrets.SERVER_PORT || '22010' }}"
+            export GIT_USER="${{ secrets.GIT_USER }}"
+            export GIT_PAT="${{ secrets.GIT_PAT }}"
+            export CLONE_FOLDER="/app/clone"
+            export NOTES_REPO="${{ secrets.NOTES_REPO }}"
+            export VOYAGE_API_KEY="${{ secrets.VOYAGE_API_KEY }}"
+            export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
+            export VECTOR_STORAGE_FOLDER="/app/vectors"
+            export HARD_CODED_API_KEY="${{ secrets.HARD_CODED_API_KEY }}"
 
-            # Clean up old images (optional - keeps disk space manageable)
+            echo "Environment variables configured for production"
+            echo "SERVER_PORT: $SERVER_PORT"
+            echo "GIT_USER: $GIT_USER"
+            echo "CLONE_FOLDER: $CLONE_FOLDER"
+            echo "VECTOR_STORAGE_FOLDER: $VECTOR_STORAGE_FOLDER"
+
+            echo ""
+            echo "=== Stopping existing containers ==="
+            podman-compose -f podman-compose.prod.yml down 2>/dev/null || true
+
+            # Clean up old containers and images
             echo "Cleaning up old images..."
+            podman container prune -f || true
             podman image prune -f || true
 
-            # Build and start new containers
-            echo "Building and starting containers..."
-            podman-compose build --no-cache
-            podman-compose up -d
+            echo ""
+            echo "=== Building and starting containers ==="
+            podman-compose -f podman-compose.prod.yml up -d --build
 
-            # Wait for services to be ready
-            echo "Waiting for services to start..."
-            sleep 15
+            echo ""
+            echo "=== Waiting for services to start ==="
+            sleep 10
 
-            # Check if containers are running
-            if podman-compose ps | grep -q "Up"; then
-              echo "Deployment successful!"
-              podman-compose ps
+            echo ""
+            echo "=== Checking deployment status ==="
+            if podman-compose -f podman-compose.prod.yml ps | grep -q "Up"; then
+              echo "✅ Deployment successful - containers are running"
+              podman-compose -f podman-compose.prod.yml ps
             else
-              echo "Deployment failed - containers not running"
+              echo "❌ Deployment failed - containers not running"
               echo "Container logs:"
-              podman-compose logs
+              podman-compose -f podman-compose.prod.yml logs vex-backend || echo "No logs available"
               exit 1
             fi
+
+            echo ""
+            echo "=== Health check ==="
+            for i in {1..30}; do
+              if curl -f -s "http://localhost:$SERVER_PORT/health" > /dev/null 2>&1; then
+                echo "✅ Health check passed - application is ready"
+                echo "🚀 Application deployed successfully at http://localhost:$SERVER_PORT"
+                exit 0
+              fi
+              echo "Health check attempt $i/30 - waiting..."
+              sleep 2
+            done
+
+            echo "⚠️  Health check timeout - check application logs"
+            podman-compose -f podman-compose.prod.yml logs --tail=50 vex-backend
           EOF
 
       - name: Verify deployment
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ~/server && \
-             sleep 10 && \
-             echo 'Testing health endpoint...' && \
-             curl -f http://localhost:\${SERVER_PORT:-22010}/health || \
-             (echo 'Health check failed, showing logs:' && podman-compose logs --tail=50 && exit 1)"
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cd ~/server
+
+            echo "=== Final deployment verification ==="
+            echo "Container status:"
+            podman-compose -f podman-compose.prod.yml ps
+
+            echo ""
+            echo "Recent application logs:"
+            podman-compose -f podman-compose.prod.yml logs --tail=20 vex-backend
+
+            echo ""
+            echo "=== Deployment Summary ==="
+            if podman-compose -f podman-compose.prod.yml ps | grep -q "Up"; then
+              echo "✅ Success - VEX application is running"
+            else
+              echo "❌ Failure - VEX application is not running"
+              exit 1
+            fi
+          EOF

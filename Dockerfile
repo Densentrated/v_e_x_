@@ -23,6 +23,17 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -a -installsuffix cgo \
     -o vex-server .
 
+# Stage for handling optional .env file
+FROM alpine:latest AS env-stage
+
+# Copy .env file if it exists, otherwise create empty placeholder
+COPY .env* /tmp/
+RUN if [ -f /tmp/.env ]; then \
+    cp /tmp/.env /.env; \
+    else \
+    touch /.env; \
+    fi
+
 # Final stage - minimal runtime image
 FROM alpine:latest
 
@@ -39,8 +50,8 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /app/backend/vex-server .
 
-# Copy .env file to root level and set proper ownership
-COPY .env /.env
+# Copy .env file from env-stage (will be either actual .env or empty file)
+COPY --from=env-stage /.env /.env
 
 # Create directories for data and set proper ownership
 RUN mkdir -p /app/clone /app/vectors && \
