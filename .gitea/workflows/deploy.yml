@@ -35,8 +35,29 @@ jobs:
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             cd ~/server
 
-            # Add podman to PATH for non-interactive shells
+            # Setup shell environment for non-interactive shells
+            echo "=== Shell Environment Debug ==="
+            echo "Current shell: $0"
+            echo "Original PATH: $PATH"
+
             export PATH="$HOME/.local/bin:$PATH"
+
+            # Source .zshenv if it exists (zsh users)
+            if [ -f "$HOME/.zshenv" ]; then
+              echo "Sourcing .zshenv"
+              source "$HOME/.zshenv"
+            fi
+
+            # Source .profile if it exists (fallback)
+            if [ -f "$HOME/.profile" ]; then
+              echo "Sourcing .profile"
+              source "$HOME/.profile"
+            fi
+
+            echo "Final PATH: $PATH"
+            echo "Podman location: $(which podman 2>/dev/null || echo 'not found')"
+            echo "Podman-compose location: $(which podman-compose 2>/dev/null || echo 'not found')"
+            echo ""
 
             echo "=== Setting up production environment variables ==="
 
@@ -107,8 +128,18 @@ jobs:
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             cd ~/server
 
-            # Add podman to PATH for non-interactive shells
+            # Setup shell environment for non-interactive shells
             export PATH="$HOME/.local/bin:$PATH"
+
+            # Source .zshenv if it exists (zsh users)
+            if [ -f "$HOME/.zshenv" ]; then
+              source "$HOME/.zshenv"
+            fi
+
+            # Source .profile if it exists (fallback)
+            if [ -f "$HOME/.profile" ]; then
+              source "$HOME/.profile"
+            fi
 
             echo "=== Final deployment verification ==="
             echo "Container status:"
