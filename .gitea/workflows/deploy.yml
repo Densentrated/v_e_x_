@@ -30,7 +30,48 @@ jobs:
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} \
             "cd ~/server && tar -xzf -"
 
-      - name: Deploy on VPS
+      - name: Build and Deploy on VPS
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cd ~/server
+
+            # Load environment variables
+            export PATH=$HOME/.local/bin:$PATH
+
+            # Stop existing containers
+            echo "Stopping existing containers..."
+            podman-compose down || true
+
+            # Clean up old images (optional - keeps disk space manageable)
+            echo "Cleaning up old images..."
+            podman image prune -f || true
+
+            # Build and start new containers
+            echo "Building and starting containers..."
+            podman-compose build --no-cache
+            podman-compose up -d
+
+            # Wait for services to be ready
+            echo "Waiting for services to start..."
+            sleep 15
+
+            # Check if containers are running
+            if podman-compose ps | grep -q "Up"; then
+              echo "Deployment successful!"
+              podman-compose ps
+            else
+              echo "Deployment failed - containers not running"
+              echo "Container logs:"
+              podman-compose logs
+              exit 1
+            fi
+          EOF
+
+      - name: Verify deployment
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} \
-            "export PATH=\$HOME/.local/bin:\$PATH && cd ~/server && podman-compose --profile prod up -d"
+            "cd ~/server && \
+             sleep 10 && \
+             echo 'Testing health endpoint...' && \
+             curl -f http://localhost:\${SERVER_PORT:-22010}/health || \
+             (echo 'Health check failed, showing logs:' && podman-compose logs --tail=50 && exit 1)"

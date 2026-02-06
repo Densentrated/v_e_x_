@@ -6,12 +6,13 @@ import (
 	"log"
 	"net/http"
 
+	"vex-backend/chat"
 	vectormgr "vex-backend/vector/manager"
 )
 
 // TestHandler returns an http.HandlerFunc that closes over the provided Manager.
-// It accepts a JSON body { "query": "<search text>" } and returns the top 3 results
-// as JSON. The handler no longer performs embedding; it only queries the vector DB.
+// It accepts a JSON body { "query": "<search text>" } and uses the ProcessQuery function
+// to provide intelligent answers based on the knowledge base.
 func TestHandler(m vectormgr.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -37,34 +38,32 @@ func TestHandler(m vectormgr.Manager) http.HandlerFunc {
 			return
 		}
 
-		log.Printf("[TestHandler] Running query %q (top 3)", req.Query)
-		results, err := m.RetriveNVectorsByQuery(ctx, req.Query, 3)
+		log.Printf("[TestHandler] Processing query %q", req.Query)
+		answer, err := chat.ProcessQuery(ctx, m, req.Query)
 		if err != nil {
-			log.Printf("[TestHandler] query error: %v", err)
-			http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+			log.Printf("[TestHandler] ProcessQuery error: %v", err)
+			http.Error(w, "query processing error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		log.Printf("[TestHandler] Query returned %d results", len(results))
+		log.Printf("[TestHandler] Generated answer for query")
 
-		// Prepare response (content, metadata, id)
-		type responseItem struct {
-			Content  string            `json:"content"`
-			Metadata map[string]string `json:"metadata"`
-			Id       string            `json:"id"`
-		}
-		out := make([]responseItem, 0, len(results))
-		for _, v := range results {
-			out = append(out, responseItem{Content: v.Content, Metadata: v.Metadata, Id: v.Id})
+		// Prepare response with the answer
+		response := struct {
+			Query  string `json:"query"`
+			Answer string `json:"answer"`
+		}{
+			Query:  req.Query,
+			Answer: answer,
 		}
 
-		respBytes, err := json.Marshal(out)
+		respBytes, err := json.Marshal(response)
 		if err != nil {
 			log.Printf("[TestHandler] failed to marshal response: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
-		log.Printf("[TestHandler] Returning %d results in HTTP response", len(out))
+		log.Printf("[TestHandler] Returning answer in HTTP response")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(respBytes)
