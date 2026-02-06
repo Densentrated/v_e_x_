@@ -54,7 +54,7 @@ func (cm *chromemManager) GetEmbedder() embed.Embedder {
 // storage functions
 func (cm *chromemManager) StoreVectorInDB(ctx context.Context, v vector.VectorData) error {
 	doc := chromem.Document{
-		ID:        fmt.Sprintf("note-%s", time.Now().UTC().Format("20060102T150405.000000000")),
+		ID:        v.Id,
 		Metadata:  v.Metadata,
 		Embedding: v.Embedding,
 		Content:   v.Content,

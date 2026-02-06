@@ -8,6 +8,8 @@ import (
 
 	"vex-backend/config"
 	"vex-backend/routes"
+	"vex-backend/vector/embed"
+	vectormgr "vex-backend/vector/manager"
 )
 
 func main() {
@@ -17,7 +19,11 @@ func main() {
 	}
 
 	fmt.Printf("Loaded config - Git User: %s, Clone Folder: %s\n", config.Config.GitUser, config.Config.CloneFolder)
-	mux := routes.RegisterRoutes()
+
+	embedder := embed.NewVoyageEmbed("voyage-4-large")
+	manager := vectormgr.NewChromemManager(embedder)
+
+	mux := routes.RegisterRoutes(manager)
 
 	port := config.Config.ServerPort
 	if port == "" {
