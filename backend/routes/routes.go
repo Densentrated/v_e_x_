@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"vex-backend/handlers"
+	"vex-backend/middleware"
 	vectormgr "vex-backend/vector/manager"
 )
 
@@ -15,7 +16,7 @@ func RegisterRoutes(m vectormgr.Manager) *http.ServeMux {
 	// handlers.GitWebhookHandler and handlers.TestHandler are expected to be functions that
 	// take a vectormgr.Manager and return an http.HandlerFunc.
 	mux.HandleFunc("/git-webhook", handlers.GitWebhookHandler(m))
-	mux.HandleFunc("/test", handlers.TestHandler(m))
+	mux.Handle("/test", middleware.RequireAPIKey(handlers.TestHandler(m)))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
