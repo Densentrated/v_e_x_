@@ -24,5 +24,9 @@ func RegisterRoutes(m vectormgr.Manager) *http.ServeMux {
 		w.Write([]byte(`{"status":"healthy","service":"vex-backend"}`))
 	})
 
+	// Serve the portal template at /portal (and also at /portal/).
+	mux.HandleFunc("/portal", handlers.PortalHandler())
+	mux.HandleFunc("/portal/", handlers.PortalHandler())
+
 	return mux
 }

@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>VEX Query</title>
+        <style>
+            @import url("https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap");
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            html,
+            body {
+                height: 100%;
+            }
+            body {
+                font-family: "M PLUS Rounded 1c", sans-serif;
+                background: #0d1424;
+                background-image:
+                    radial-gradient(
+                        ellipse at 20% 50%,
+                        rgba(100, 160, 255, 0.1) 0%,
+                        transparent 50%
+                    ),
+                    radial-gradient(
+                        ellipse at 80% 20%,
+                        rgba(140, 200, 255, 0.08) 0%,
+                        transparent 50%
+                    ),
+                    radial-gradient(
+                        ellipse at 50% 80%,
+                        rgba(80, 140, 255, 0.06) 0%,
+                        transparent 50%
+                    );
+                color: #d0dff0;
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                padding: 40px 20px;
+                position: relative;
+            }
+            .container {
+                width: 100%;
+                max-width: 720px;
+                position: relative;
+                z-index: 1;
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 36px;
+            }
+            .header .kaomoji-top {
+                font-size: 1.6rem;
+                margin-bottom: 4px;
+                display: block;
+            }
+            h1 {
+                font-size: 2rem;
+                font-weight: 800;
+                background: linear-gradient(135deg, #6db3ff, #a8d8ff, #c0e0ff);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+            .subtitle {
+                color: #7a9bbd;
+                font-size: 0.95rem;
+                margin-top: 6px;
+            }
+            label {
+                display: block;
+                font-size: 0.85rem;
+                color: #8ab4d8;
+                margin-bottom: 6px;
+                font-weight: 700;
+            }
+            label .label-kao {
+                font-weight: 400;
+                opacity: 0.7;
+            }
+            input,
+            textarea {
+                width: 100%;
+                padding: 12px 16px;
+                border: 2px solid #1e3050;
+                border-radius: 14px;
+                background: #13213a;
+                color: #d0dff0;
+                font-size: 0.95rem;
+                font-family: inherit;
+                outline: none;
+                transition:
+                    border-color 0.3s,
+                    box-shadow 0.3s;
+            }
+            input::placeholder,
+            textarea::placeholder {
+                color: #3e5a7a;
+            }
+            input:focus,
+            textarea:focus {
+                border-color: #5a9ff5;
+                box-shadow: 0 0 16px rgba(90, 159, 245, 0.15);
+            }
+            textarea {
+                resize: vertical;
+                min-height: 100px;
+            }
+            .field {
+                margin-bottom: 20px;
+            }
+            button {
+                background: linear-gradient(135deg, #4a8ef5, #6dc0ff);
+                color: #fff;
+                border: none;
+                padding: 14px 28px;
+                border-radius: 14px;
+                font-size: 1.05rem;
+                font-weight: 700;
+                font-family: inherit;
+                cursor: pointer;
+                transition:
+                    transform 0.15s,
+                    box-shadow 0.3s;
+                width: 100%;
+                box-shadow: 0 4px 20px rgba(74, 142, 245, 0.25);
+            }
+            button:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 6px 28px rgba(74, 142, 245, 0.35);
+            }
+            button:active {
+                transform: translateY(0);
+            }
+            button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                transform: none;
+            }
+            .result-box {
+                margin-top: 32px;
+                padding: 24px;
+                background: #13213a;
+                border: 2px solid #1e3050;
+                border-radius: 16px;
+                line-height: 1.75;
+                word-wrap: break-word;
+                display: none;
+            }
+            .result-box.visible {
+                display: block;
+            }
+            .result-box .result-header {
+                font-size: 0.85rem;
+                color: #5a9ff5;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                margin-bottom: 14px;
+            }
+            .result-content {
+                font-size: 0.95rem;
+                color: #c0d8f0;
+            }
+            .result-content h1,
+            .result-content h2,
+            .result-content h3 {
+                background: linear-gradient(135deg, #6db3ff, #a8d8ff);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                margin: 16px 0 8px;
+            }
+            .result-content h1 {
+                font-size: 1.3rem;
+            }
+            .result-content h2 {
+                font-size: 1.1rem;
+            }
+            .result-content h3 {
+                font-size: 1rem;
+            }
+            .result-content p {
+                margin: 8px 0;
+            }
+            .result-content ul,
+            .result-content ol {
+                margin: 8px 0 8px 24px;
+            }
+            .result-content li {
+                margin: 4px 0;
+            }
+            .result-content code {
+                background: #1a2d4a;
+                padding: 2px 7px;
+                border-radius: 6px;
+                font-size: 0.88rem;
+                font-family: "SF Mono", Consolas, monospace;
+                color: #8cc8ff;
+            }
+            .result-content pre {
+                background: #0b1525;
+                padding: 14px;
+                border-radius: 12px;
+                overflow-x: auto;
+                margin: 12px 0;
+                border: 1px solid #1e3050;
+            }
+            .result-content pre code {
+                background: none;
+                padding: 0;
+                color: #c0d8f0;
+            }
+            .result-content blockquote {
+                border-left: 3px solid #5a9ff5;
+                padding-left: 14px;
+                margin: 12px 0;
+                color: #7a9bbd;
+            }
+            .result-content strong {
+                color: #a8d8ff;
+            }
+            .result-content table {
+                border-collapse: collapse;
+                margin: 12px 0;
+                width: 100%;
+            }
+            .result-content th,
+            .result-content td {
+                border: 1px solid #1e3050;
+                padding: 8px 12px;
+                text-align: left;
+            }
+            .result-content th {
+                background: #1a2d4a;
+                color: #a8d8ff;
+            }
+            .error {
+                color: #ff8ea1;
+            }
+            .spinner {
+                display: inline-block;
+                width: 18px;
+                height: 18px;
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-top-color: #fff;
+                border-radius: 50%;
+                animation: spin 0.6s linear infinite;
+                vertical-align: middle;
+                margin-right: 8px;
+            }
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .floaters {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                overflow: hidden;
+                z-index: 0;
+            }
+            .floater {
+                position: absolute;
+                opacity: 0.1;
+                white-space: nowrap;
+            }
+            .floater.drift-up {
+                animation: floatUp linear infinite;
+            }
+            .floater.drift-down {
+                animation: floatDown linear infinite;
+            }
+            @keyframes floatUp {
+                0% {
+                    transform: translateY(0) rotate(0deg);
+                    opacity: 0;
+                }
+                5% {
+                    opacity: 0.1;
+                }
+                95% {
+                    opacity: 0.1;
+                }
+                100% {
+                    transform: translateY(-110vh) rotate(15deg);
+                    opacity: 0;
+                }
+            }
+            @keyframes floatDown {
+                0% {
+                    transform: translateY(0) rotate(0deg);
+                    opacity: 0;
+                }
+                5% {
+                    opacity: 0.1;
+                }
+                95% {
+                    opacity: 0.1;
+                }
+                100% {
+                    transform: translateY(110vh) rotate(-15deg);
+                    opacity: 0;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="floaters" id="floaters"></div>
+
+        <div class="container">
+            <div class="header">
+                <span class="kaomoji-top">₊˚⊹ ᕱ⑅ᕱ ♡</span>
+                <h1>VEX Query</h1>
+                <p class="subtitle">ask me anything ~ (˶ᵔ ᵕ ᵔ˶)</p>
+            </div>
+
+            <div class="field">
+                <label for="apiKey"
+                    >API Key <span class="label-kao">(っ˘ω˘ς)</span></label
+                >
+                <input
+                    type="password"
+                    id="apiKey"
+                    placeholder="your secret key goes here (ᐢ.ˬ.ᐢ)"
+                />
+            </div>
+
+            <div class="field">
+                <label for="query"
+                    >Query <span class="label-kao">( ˶ˆᗜˆ˵ )</span></label
+                >
+                <textarea
+                    id="query"
+                    placeholder="what would you like to know? (´｡• ᵕ •｡`)"
+                ></textarea>
+            </div>
+
+            <button id="submitBtn" onclick="submitQuery()">
+                (ノ´ヮ`)ノ Ask Away ~
+            </button>
+
+            <div class="result-box" id="resultBox">
+                <div class="result-header">(⁠◠⁠‿⁠◠) Response</div>
+                <div class="result-content" id="resultContent"></div>
+            </div>
+        </div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
+        <script>
+            const kaomojis = [
+                "(´｡• ᵕ •｡`)",
+                "(˶ᵔ ᵕ ᵔ˶)",
+                "(ᐢ.ˬ.ᐢ)",
+                "(≧◡≦)",
+                "(╹◡╹)",
+                "ʕ•ᴥ•ʔ",
+                "(◕‿◕)",
+                "(ᵔᴥᵔ)",
+                "(っ˘ω˘ς)",
+                "(⁠◠⁠‿⁠◠)",
+                "(⌒‿⌒)",
+                "(=^・ω・^=)",
+                "(。♥‿♥。)",
+                "(づ ᴗ _ᴗ)づ",
+                "₍ᐢ..ᐢ₎",
+                "(ノ´ヮ`)ノ",
+                "(˶ˆᗜˆ˵)",
+                "( ˶ˆ꒳ˆ˵)",
+                "(⁎⁍̴̛ᴗ⁍̴̛⁎)",
+                "(๑˃ᴗ˂)",
+            ];
+            const floaters = document.getElementById("floaters");
+
+            for (let i = 0; i < 50; i++) {
+                const el = document.createElement("span");
+                el.className = "floater";
+                el.textContent =
+                    kaomojis[Math.floor(Math.random() * kaomojis.length)];
+                const goUp = Math.random() > 0.5;
+                el.classList.add(goUp ? "drift-up" : "drift-down");
+                el.style.left = Math.random() * 95 + "%";
+                el.style.top = Math.random() * 100 + "%";
+                el.style.fontSize = 0.7 + Math.random() * 1 + "rem";
+                const dur = 18 + Math.random() * 30;
+                el.style.animationDuration = dur + "s";
+                el.style.animationDelay = -(Math.random() * dur) + "s";
+                floaters.appendChild(el);
+            }
+
+            const statusKao = {
+                loading: ["(　˶′ᵕ‵˶)", "₍ᐢ.ˬ.ᐢ₎", "(˶ᵔ ᵕ ᵔ˶)"],
+                success: ["(ﾉ´ヮ`)ﾉ ~", "(≧◡≦)", "ヽ(>∀<)ノ"],
+                error: ["(´；ω；`)", "(╥_╥)", "(ノД`)・゜・。"],
+            };
+            function randomKao(type) {
+                const arr = statusKao[type];
+                return arr[Math.floor(Math.random() * arr.length)];
+            }
+
+            async function submitQuery() {
+                const apiKey = document.getElementById("apiKey").value.trim();
+                const query = document.getElementById("query").value.trim();
+                const btn = document.getElementById("submitBtn");
+                const box = document.getElementById("resultBox");
+                const content = document.getElementById("resultContent");
+
+                if (!apiKey || !query) {
+                    box.classList.add("visible");
+                    content.className = "result-content error";
+                    content.textContent =
+                        randomKao("error") + " please fill in both fields~!";
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.innerHTML =
+                    '<span class="spinner"></span>' +
+                    randomKao("loading") +
+                    " thinking…";
+                box.classList.add("visible");
+                content.className = "result-content";
+                content.innerHTML = "";
+
+                try {
+                    const res = await fetch("/query", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: "Bearer " + apiKey,
+                        },
+                        body: JSON.stringify({ query }),
+                    });
+
+                    if (!res.ok) {
+                        const errText = await res.text();
+                        throw new Error(
+                            res.status + " — " + (errText || "request failed"),
+                        );
+                    }
+
+                    const data = await res.json();
+                    const raw = data.answer || JSON.stringify(data, null, 2);
+                    content.innerHTML = marked.parse(raw);
+                } catch (err) {
+                    content.className = "result-content error";
+                    content.textContent =
+                        randomKao("error") + " " + err.message;
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = "(ノ´ヮ`)ノ Ask Away ~";
+                }
+            }
+
+            document
+                .getElementById("query")
+                .addEventListener("keydown", (e) => {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey))
+                        submitQuery();
+                });
+        </script>
+    </body>
+</html>
