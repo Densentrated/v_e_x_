@@ -16,11 +16,11 @@ services:
       - SERVER_PORT=${SERVER_PORT:-22010}
       - GIT_USER=${GIT_USER}
       - GIT_PAT=${GIT_PAT}
-      - CLONE_FOLDER=${CLONE_FOLDER:-/app/clone}
+      - CLONE_FOLDER=/app/clone
       - NOTES_REPO=${NOTES_REPO}
       - VOYAGE_API_KEY=${VOYAGE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - VECTOR_STORAGE_FOLDER=${VECTOR_STORAGE_FOLDER:-/app/vectors}
+      - VECTOR_STORAGE_FOLDER=/app/vectors
       - HARD_CODED_API_KEY=${HARD_CODED_API_KEY}
     volumes:
       - clone_data:/app/clone
