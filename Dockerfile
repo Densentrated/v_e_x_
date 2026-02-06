@@ -51,6 +51,10 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /app/backend/vex-server .
 
+# Copy templates from the builder so they are preserved in the final image
+# Templates will be available at /app/templates next to the binary.
+COPY --from=builder /app/backend/templates ./templates
+
 # Copy .env file from env-stage (will be either actual .env or empty file)
 COPY --from=env-stage /.env /.env
 
