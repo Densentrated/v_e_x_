@@ -35,6 +35,9 @@ jobs:
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} 'bash -l -c "
             cd ~/server
 
+            # Ensure ~/.local/bin is in PATH for podman-compose
+            export PATH=\"\$HOME/.local/bin:\$PATH\"
+
             echo \"=== Shell Environment Debug ===\"
             echo \"Current shell: \$0\"
             echo \"PATH: \$PATH\"
