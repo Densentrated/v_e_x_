@@ -9,7 +9,6 @@ import (
 	"vex-backend/config"
 	"vex-backend/vector"
 	"vex-backend/vector/embed"
-	"vex-backend/vector/manager"
 
 	"github.com/philippgille/chromem-go"
 )
@@ -20,7 +19,7 @@ type chromemManager struct {
 }
 
 // creates a Manager object for vectors,
-func NewChromemManager(e embed.Embedder) manager.Manager {
+func NewChromemManager(e embed.Embedder) Manager {
 	var db *chromem.DB
 	var err error
 
@@ -45,7 +44,7 @@ func NewChromemManager(e embed.Embedder) manager.Manager {
 func (cm *chromemManager) getNotesCollection() chromem.Collection {
 	return *cm.DBInstance.GetCollection("notes", cm.Embedder.EmbedToVector)
 }
-func (cm *chromemManager) GetDBInstance() *chromem.DB {
+func (cm *chromemManager) GetDBInstance() any {
 	return cm.DBInstance
 }
 func (cm *chromemManager) GetEmbedder() embed.Embedder {
@@ -55,7 +54,7 @@ func (cm *chromemManager) GetEmbedder() embed.Embedder {
 // storage functions
 func (cm *chromemManager) StoreVectorInDB(ctx context.Context, v vector.VectorData) error {
 	doc := chromem.Document{
-		ID:        "",
+		ID:        fmt.Sprintf("note-%s", time.Now().UTC().Format("20060102T150405.000000000")),
 		Metadata:  v.Metadata,
 		Embedding: v.Embedding,
 		Content:   v.Content,
