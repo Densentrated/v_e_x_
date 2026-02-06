@@ -353,6 +353,11 @@
             </div>
         </div>
 
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css"
+        />
+        <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
         <script>
             const kaomojis = [
@@ -405,6 +410,63 @@
                 return arr[Math.floor(Math.random() * arr.length)];
             }
 
+            // Simple HTML-escape helper for fallback output
+            function escapeHtml(s) {
+                return String(s)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+            }
+
+            // Replace LaTeX math delimiters in raw markdown with KaTeX-rendered HTML.
+            // This runs before passing the string to marked so the KaTeX HTML is preserved.
+            // Supports display math with $$...$$ and inline math with $...$.
+            // It intentionally also processes math inside code blocks (per your request).
+            function renderMathToHTML(md) {
+                if (
+                    typeof katex === "undefined" ||
+                    typeof katex.renderToString !== "function"
+                ) {
+                    // KaTeX not available; return original markdown.
+                    return md;
+                }
+
+                // Render display math first ($$ ... $$)
+                md = md.replace(/\$\$([\s\S]+?)\$\$/g, function (_, tex) {
+                    try {
+                        return katex.renderToString(tex, {
+                            displayMode: true,
+                            throwOnError: false,
+                        });
+                    } catch (e) {
+                        return (
+                            '<pre class="katex-error">' +
+                            escapeHtml(tex) +
+                            "</pre>"
+                        );
+                    }
+                });
+
+                // Render inline math ($ ... $)
+                // Avoid matching a single $ alone or newlines inside inline math.
+                md = md.replace(/\$([^\$\n][^\$]*?)\$/g, function (_, tex) {
+                    try {
+                        return katex.renderToString(tex, {
+                            displayMode: false,
+                            throwOnError: false,
+                        });
+                    } catch (e) {
+                        return (
+                            '<code class="katex-error">' +
+                            escapeHtml(tex) +
+                            "</code>"
+                        );
+                    }
+                });
+
+                return md;
+            }
+
             async function submitQuery() {
                 const apiKey = document.getElementById("apiKey").value.trim();
                 const query = document.getElementById("query").value.trim();
@@ -448,7 +510,9 @@
 
                     const data = await res.json();
                     const raw = data.answer || JSON.stringify(data, null, 2);
-                    content.innerHTML = marked.parse(raw);
+                    // Render LaTeX in the raw markdown to KaTeX HTML, then parse the markdown.
+                    const processed = renderMathToHTML(raw);
+                    content.innerHTML = marked.parse(processed);
                 } catch (err) {
                     content.className = "result-content error";
                     content.textContent =
