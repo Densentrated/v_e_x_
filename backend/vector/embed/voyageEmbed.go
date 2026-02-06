@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"vex-backend/config"
 	"vex-backend/vector"
@@ -24,7 +25,7 @@ func NewVoyageEmbed(model string) Embedder {
 }
 
 func (ve voyageEmbed) CreateChunks(ctx context.Context, content string) []string {
-	const maxChunkRunes = 10000 // tune as needed for model token limits
+	const maxChunkRunes = 50000 // Large chunk size for comprehensive content sections
 	overlapRunes := maxChunkRunes / 5
 
 	content = strings.TrimSpace(content)
@@ -32,18 +33,23 @@ func (ve voyageEmbed) CreateChunks(ctx context.Context, content string) []string
 		return []string{}
 	}
 
+	// If the entire content fits in one chunk, return it as a single chunk
+	if len(content) <= maxChunkRunes {
+		return []string{content}
+	}
+
+	// If content is too large, split by words with overlap
+	var chunks []string
 	words := strings.Fields(content)
 	if len(words) == 0 {
 		return []string{content}
 	}
 
-	var chunks []string
-
 	for start := 0; start < len(words); {
 		cur := 0
 		end := start
 
-		// build chunk from start..end (exclusive) not exceeding maxChunkRunes (measured in bytes)
+		// build chunk from start..end (exclusive) not exceeding maxChunkRunes
 		for end < len(words) {
 			wlen := len(words[end])
 			add := wlen
@@ -61,7 +67,7 @@ func (ve voyageEmbed) CreateChunks(ctx context.Context, content string) []string
 			end++
 		}
 
-		// create chunk string
+		// create chunk string from this range of words
 		chunk := strings.Join(words[start:end], " ")
 		chunks = append(chunks, strings.TrimSpace(chunk))
 
@@ -103,7 +109,7 @@ func (ve voyageEmbed) EmbedToVector(ctx context.Context, content string) ([]floa
 	reqBody := map[string]any{
 		"input":      []string{content},
 		"model":      ve.Model,
-		"inpyt_type": "document",
+		"input_type": "document",
 	}
 
 	reqBytes, err := json.Marshal(reqBody)
@@ -222,6 +228,20 @@ func (ve voyageEmbed) EmbedFileToVectorData(ctx context.Context, filename string
 		return nil, err
 	}
 
-	// Delegate to EmbedStringToVectorData
+	// Ensure metadata map exists and that filepath/filename are set so downstream
+	// code (and deletion by metadata) can reliably reference the source file.
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+	// store the absolute/clean path for consistent lookups
+	absPath, err := filepath.Abs(filename)
+	if err == nil && absPath != "" {
+		metadata["filepath"] = absPath
+	} else {
+		metadata["filepath"] = filename
+	}
+	metadata["filename"] = filepath.Base(filename)
+
+	// Delegate to EmbedStringToVectorData with the full file contents
 	return ve.EmbedStringToVectorData(ctx, string(b), metadata)
 }

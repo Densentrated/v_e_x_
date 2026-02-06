@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"vex-backend/config"
@@ -14,18 +17,80 @@ type WebhookPayload struct {
 	RepoURL string `json:"repo_url"`
 }
 
-// GitWebhookHandler returns an http.HandlerFunc that wraps the original git webhook
-// behaviour. It accepts the Manager so you can use it inside the handler.
+// GitWebhookHandler returns an http.HandlerFunc that pulls the repo, deletes any existing
+// vectors for markdown files and re-embeds them. It uses the provided Manager instance.
 func GitWebhookHandler(m vectormgr.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Push to notes repo at time %v", time.Now())
-		changedFiles, _ := git.GetFiles(config.Config.NotesRepo)
-		for _, file := range changedFiles {
-			log.Printf("%s", file)
+		start := time.Now()
+		log.Printf("[GitWebhook] invoked at %v from %s", start, r.RemoteAddr)
+
+		// Ensure repo is up to date (clone or pull)
+		repo := config.Config.NotesRepo
+		log.Printf("[GitWebhook] ensuring notes repo is up-to-date: %s", repo)
+		files, err := git.GetFiles(repo)
+		if err != nil {
+			log.Printf("[GitWebhook] git.GetFiles error: %v", err)
+			http.Error(w, "git error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		log.Printf("[GitWebhook] repo contains %d files", len(files))
+
+		basePath := filepath.Join(config.Config.CloneFolder, filepath.Base(repo))
+
+		processed := make([]string, 0, len(files))
+		skipped := make([]string, 0, len(files))
+
+		// For now we treat \"new files\" as all markdown files in the repo:
+		// delete any existing vectors for the file (by metadata) then re-embed it.
+		for _, rel := range files {
+			// only process markdown files
+			if strings.ToLower(filepath.Ext(rel)) != ".md" {
+				skipped = append(skipped, rel)
+				log.Printf("[GitWebhook] skipping non-markdown file: %s", rel)
+				continue
+			}
+
+			fullpath := filepath.Join(basePath, rel)
+			log.Printf("[GitWebhook] processing markdown file: %s", fullpath)
+
+			// delete any existing vectors that have metadata filepath = fullpath
+			if err := m.DeleteVectorsWithMetaData(r.Context(), "filepath", fullpath); err != nil {
+				// don't fail the whole webhook on delete errors; log and continue
+				log.Printf("[GitWebhook] warning: failed to delete existing vectors for %s: %v", fullpath, err)
+			} else {
+				log.Printf("[GitWebhook] deleted existing vectors for %s", fullpath)
+			}
+
+			// store (embed) the file into the vector DB
+			if err := m.StoreFileAsVectorsInDB(r.Context(), fullpath); err != nil {
+				log.Printf("[GitWebhook] failed to store vectors for %s: %v", fullpath, err)
+				http.Error(w, "embed error: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			log.Printf("[GitWebhook] embedded %s", fullpath)
+			processed = append(processed, rel)
 		}
 
+		duration := time.Since(start)
+		resp := map[string]any{
+			"status":          "success",
+			"processed_count": len(processed),
+			"skipped_count":   len(skipped),
+			"processed":       processed,
+			"skipped":         skipped,
+			"duration_ms":     duration.Milliseconds(),
+		}
+
+		respBytes, err := json.Marshal(resp)
+		if err != nil {
+			log.Printf("[GitWebhook] failed to marshal response: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("[GitWebhook] completed: processed=%d skipped=%d duration=%s", len(processed), len(skipped), duration)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"success"}`))
+		w.Write(respBytes)
 	}
 }
