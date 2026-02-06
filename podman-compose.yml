@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  vex-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vex-backend
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-22010}:${SERVER_PORT:-22010}"
+    environment:
+      - SERVER_PORT=${SERVER_PORT:-22010}
+      - GIT_USER=${GIT_USER}
+      - GIT_PAT=${GIT_PAT}
+      - CLONE_FOLDER=${CLONE_FOLDER:-/app/clone}
+      - NOTES_REPO=${NOTES_REPO}
+      - VOYAGE_API_KEY=${VOYAGE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VECTOR_STORAGE_FOLDER=${VECTOR_STORAGE_FOLDER:-/app/vectors}
+    volumes:
+      - clone_data:/app/clone
+      - vector_data:/app/vectors
+      - ./NotesDir:/app/NotesDir:ro
+    networks:
+      - vex-network
+    healthcheck:
+      test:
+        ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT:-22010}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  clone_data:
+    driver: local
+  vector_data:
+    driver: local
+
+networks:
+  vex-network:
+    driver: bridge

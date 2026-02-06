@@ -1,0 +1,91 @@
+name: Deploy Go Server Direct to VPS
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy source code to VPS
+        run: |
+          # Create server directory on VPS if it doesn't exist
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} "mkdir -p ~/server"
+
+          # Remove old files and copy new ones
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} "cd ~/server && rm -rf * .*[!.] 2>/dev/null || true"
+
+          # Copy all files except .git and .gitea directories
+          tar --exclude='.git' --exclude='.gitea' -czf - . | \
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} \
+            "cd ~/server && tar -xzf -"
+
+      - name: Build and Deploy Go Server on VPS
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cd ~/server/backend
+
+            # Check if Go is installed
+            if ! command -v go &> /dev/null; then
+              echo "Installing Go..."
+              wget -q https://golang.org/dl/go1.21.5.linux-amd64.tar.gz
+              sudo rm -rf /usr/local/go
+              sudo tar -C /usr/local -xzf go1.21.5.linux-amd64.tar.gz
+              echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+              export PATH=$PATH:/usr/local/go/bin
+            fi
+
+            # Build the server
+            echo "Building Go server..."
+            go mod download
+            go build -o vex-server .
+            chmod +x vex-server
+
+            # Stop existing server if running
+            echo "Stopping existing server..."
+            pkill -f vex-server || true
+
+            # Copy .env file if it exists
+            if [ -f "../.env" ]; then
+              cp ../.env .
+            fi
+
+            # Start the server in background
+            echo "Starting Go server..."
+            nohup ./vex-server > server.log 2>&1 &
+
+            # Wait a moment and check if server started
+            sleep 3
+            if pgrep -f vex-server > /dev/null; then
+              echo "Server started successfully"
+              echo "Server PID: $(pgrep -f vex-server)"
+            else
+              echo "Server failed to start. Check server.log:"
+              tail -20 server.log
+              exit 1
+            fi
+          EOF
+
+      - name: Verify deployment
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.VPS_HOST }} \
+            "cd ~/server/backend && \
+             sleep 5 && \
+             if pgrep -f vex-server > /dev/null; then \
+               echo 'Deployment successful - Server is running'; \
+               echo 'Server logs:'; \
+               tail -10 server.log; \
+             else \
+               echo 'Deployment failed - Server not running'; \
+               exit 1; \
+             fi"

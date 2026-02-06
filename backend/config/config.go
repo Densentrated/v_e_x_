@@ -44,53 +44,62 @@ func InitConfig() error {
 	return nil
 }
 
-// LoadEnv loads environment variables from .env file one directory above the project
+// LoadEnv loads environment variables with OS env vars taking priority over .env file
 func LoadEnv() (Env, error) {
-	// Get the directory one level above the current working directory
+	env := make(Env)
+
+	// First, try to load from .env file (if it exists)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
 	envFilePath := filepath.Join(filepath.Dir(cwd), ".env")
-
-	// Read and parse the .env file
 	file, err := os.Open(envFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open .env file at %s: %w", envFilePath, err)
+	if err == nil {
+		// .env file exists, parse it
+		defer file.Close()
+		scanner := bufio.NewScanner(file)
+
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+
+			// Skip empty lines and comments
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+
+			// Parse key=value pairs
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+
+			key := strings.TrimSpace(parts[0])
+			value := strings.Trim(strings.TrimSpace(parts[1]), "\"")
+
+			// Expand ~ to home directory if present
+			if strings.HasPrefix(value, "~") {
+				value = expandTilde(value)
+			}
+
+			env[key] = value
+		}
+
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("failed to read .env file: %w", err)
+		}
 	}
-	defer file.Close()
+	// If .env file doesn't exist, that's OK - we'll use OS environment variables
 
-	env := make(Env)
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+	// Override with OS environment variables (these take priority)
+	for _, osEnv := range os.Environ() {
+		parts := strings.SplitN(osEnv, "=", 2)
+		if len(parts) == 2 {
+			key := parts[0]
+			value := parts[1]
+			env[key] = value
 		}
-
-		// Parse key=value pairs
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-
-		key := strings.TrimSpace(parts[0])
-		value := strings.Trim(strings.TrimSpace(parts[1]), "\"")
-
-		// Expand ~ to home directory if present
-		if strings.HasPrefix(value, "~") {
-			value = expandTilde(value)
-		}
-
-		env[key] = value
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read .env file: %w", err)
 	}
 
 	return env, nil
