@@ -7,6 +7,8 @@ import (
 	"vex-backend/config"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
@@ -59,6 +61,13 @@ func PullRepo(repoURL string) ([]string, error) {
 		return nil, fmt.Errorf("failed to open repository: %w", err)
 	}
 
+	// Get current HEAD before pulling
+	ref, err := repo.Head()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get HEAD: %w", err)
+	}
+	oldCommit := ref.Hash()
+
 	// Get the working tree
 	worktree, err := repo.Worktree()
 	if err != nil {
@@ -76,28 +85,45 @@ func PullRepo(repoURL string) ([]string, error) {
 		return nil, fmt.Errorf("failed to pull repository: %w", err)
 	}
 
-	// Get all files in the repository (changed files would be the current state)
-	files, err := getAllFiles(clonePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get files from repository: %w", err)
+	// If no changes, return empty list
+	if err == git.NoErrAlreadyUpToDate {
+		return []string{}, nil
 	}
 
-	return files, nil
+	// Get new HEAD after pulling
+	newRef, err := repo.Head()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get new HEAD: %w", err)
+	}
+	newCommit := newRef.Hash()
+
+	// Get changed files between old and new commits
+	changedFiles, err := getChangedFiles(repo, oldCommit, newCommit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get changed files: %w", err)
+	}
+
+	return changedFiles, nil
 }
 
 // GetFiles clones the repository if it doesn't exist, or pulls if it does
 // Returns the list of changed files (or all files if newly cloned)
 // repoURL should be the full URL to the git repository
 func GetFiles(repoURL string) ([]string, error) {
+	return GetChangedFiles(repoURL)
+}
+
+// GetChangedFiles returns only changed files on pull, all files on first clone
+func GetChangedFiles(repoURL string) ([]string, error) {
 	clonePath := filepath.Join(config.Config.CloneFolder, filepath.Base(repoURL))
 
 	// Check if the repository already exists
 	if _, err := os.Stat(clonePath); os.IsNotExist(err) {
-		// Repository doesn't exist, clone it
+		// Repository doesn't exist, clone it (returns all files)
 		return CloneRepo(repoURL)
 	}
 
-	// Repository exists, pull the latest changes
+	// Repository exists, pull the latest changes (returns only changed files)
 	return PullRepo(repoURL)
 }
 
@@ -133,4 +159,47 @@ func getAllFiles(repoPath string) ([]string, error) {
 	}
 
 	return files, nil
+}
+
+// getChangedFiles returns the list of files that changed between two commits
+func getChangedFiles(repo *git.Repository, oldCommit, newCommit plumbing.Hash) ([]string, error) {
+	// Get the commit objects
+	oldCommitObj, err := repo.CommitObject(oldCommit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get old commit object: %w", err)
+	}
+
+	newCommitObj, err := repo.CommitObject(newCommit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get new commit object: %w", err)
+	}
+
+	// Get the trees for both commits
+	oldTree, err := oldCommitObj.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get old tree: %w", err)
+	}
+
+	newTree, err := newCommitObj.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get new tree: %w", err)
+	}
+
+	// Get the diff between trees
+	changes, err := object.DiffTree(oldTree, newTree)
+	if err != nil {
+		return nil, fmt.Errorf("failed to diff trees: %w", err)
+	}
+
+	var changedFiles []string
+	for _, change := range changes {
+		// Include files that are added, modified, or renamed
+		if change.To.Name != "" {
+			changedFiles = append(changedFiles, change.To.Name)
+		}
+		// For deleted files, we might want to handle them differently
+		// but for now we'll skip them since they don't need re-embedding
+	}
+
+	return changedFiles, nil
 }
