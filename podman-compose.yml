@@ -5,6 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        TARGETARCH: ${TARGETARCH:-amd64}
+    platform: linux/${TARGETARCH:-amd64}
     container_name: vex-backend
     restart: unless-stopped
     ports:

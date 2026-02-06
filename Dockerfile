@@ -17,8 +17,9 @@ RUN go mod download
 # Copy source code
 COPY backend/ ./
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+# Build the application for target architecture
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
     -ldflags='-w -s -extldflags "-static"' \
     -a -installsuffix cgo \
     -o vex-server .

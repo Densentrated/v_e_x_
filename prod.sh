@@ -123,6 +123,28 @@ case "${1:-deploy}" in
             exit 1
         fi
 
+        # Detect system architecture for Go build
+        print_status "Detecting system architecture..."
+        ARCH=$(uname -m)
+        case $ARCH in
+            x86_64)
+                export TARGETARCH=amd64
+                ;;
+            aarch64|arm64)
+                export TARGETARCH=arm64
+                ;;
+            armv7l)
+                export TARGETARCH=arm
+                ;;
+            *)
+                export TARGETARCH=amd64
+                print_warning "Unknown architecture $ARCH, defaulting to amd64"
+                ;;
+        esac
+        print_status "System architecture: $ARCH"
+        print_status "Target Go architecture: $TARGETARCH"
+        echo ""
+
         show_config
         echo ""
 

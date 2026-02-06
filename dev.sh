@@ -89,6 +89,29 @@ echo ""
 case "${1:-up}" in
     "up"|"start")
         print_status "Starting development environment..."
+
+        # Detect system architecture for Go build
+        print_status "Detecting system architecture..."
+        ARCH=$(uname -m)
+        case $ARCH in
+            x86_64)
+                export TARGETARCH=amd64
+                ;;
+            aarch64|arm64)
+                export TARGETARCH=arm64
+                ;;
+            armv7l)
+                export TARGETARCH=arm
+                ;;
+            *)
+                export TARGETARCH=amd64
+                print_warning "Unknown architecture $ARCH, defaulting to amd64"
+                ;;
+        esac
+        print_status "System architecture: $ARCH"
+        print_status "Target Go architecture: $TARGETARCH"
+        echo ""
+
         podman-compose -f podman-compose.dev.yml up -d --build
 
         # Wait for services to start
@@ -123,6 +146,24 @@ case "${1:-up}" in
 
     "restart")
         print_status "Restarting development environment..."
+
+        # Detect system architecture for Go build
+        ARCH=$(uname -m)
+        case $ARCH in
+            x86_64)
+                export TARGETARCH=amd64
+                ;;
+            aarch64|arm64)
+                export TARGETARCH=arm64
+                ;;
+            armv7l)
+                export TARGETARCH=arm
+                ;;
+            *)
+                export TARGETARCH=amd64
+                ;;
+        esac
+
         podman-compose -f podman-compose.dev.yml down
         podman-compose -f podman-compose.dev.yml up -d --build
         sleep 5
@@ -146,6 +187,24 @@ case "${1:-up}" in
 
     "build")
         print_status "Building application..."
+
+        # Detect system architecture for Go build
+        ARCH=$(uname -m)
+        case $ARCH in
+            x86_64)
+                export TARGETARCH=amd64
+                ;;
+            aarch64|arm64)
+                export TARGETARCH=arm64
+                ;;
+            armv7l)
+                export TARGETARCH=arm
+                ;;
+            *)
+                export TARGETARCH=amd64
+                ;;
+        esac
+
         podman-compose -f podman-compose.dev.yml build --no-cache
         print_success "Build completed"
         ;;
