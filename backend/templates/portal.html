@@ -4,6 +4,14 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>VEX Query</title>
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css"
+        />
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark-dimmed.min.css"
+        />
         <style>
             @import url("https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap");
             * {
@@ -34,6 +42,7 @@
                         rgba(80, 140, 255, 0.06) 0%,
                         transparent 50%
                     );
+                background-attachment: fixed;
                 color: #d0dff0;
                 min-height: 100vh;
                 display: flex;
@@ -43,7 +52,7 @@
             }
             .container {
                 width: 100%;
-                max-width: 720px;
+                max-width: 960px;
                 position: relative;
                 z-index: 1;
             }
@@ -212,6 +221,8 @@
                 background: none;
                 padding: 0;
                 color: #c0d8f0;
+                font-size: 0.88rem;
+                line-height: 1.6;
             }
             .result-content blockquote {
                 border-left: 3px solid #5a9ff5;
@@ -237,6 +248,19 @@
                 background: #1a2d4a;
                 color: #a8d8ff;
             }
+
+            /* KaTeX overrides */
+            .result-content .katex-display {
+                margin: 16px 0;
+                overflow-x: auto;
+                overflow-y: hidden;
+                padding: 8px 0;
+            }
+            .result-content .katex {
+                color: #d0e8ff;
+                font-size: 1.05em;
+            }
+
             .error {
                 color: #ff8ea1;
             }
@@ -319,7 +343,9 @@
             <div class="header">
                 <span class="kaomoji-top">₊˚⊹ ᕱ⑅ᕱ ♡</span>
                 <h1>VEX Query</h1>
-                <p class="subtitle">ask me anything ~ (˶ᵔ ᵕ ᵔ˶)</p>
+                <p class="subtitle">
+                    all the things you should know ~ (˶ᵔ ᵕ ᵔ˶)
+                </p>
             </div>
 
             <div class="field">
@@ -353,13 +379,159 @@
             </div>
         </div>
 
-        <link
-            rel="stylesheet"
-            href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css"
-        />
-        <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
         <script>
+            // --- Marked config: syntax highlighting for code blocks ---
+            marked.setOptions({
+                highlight: function (code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        return hljs.highlight(code, { language: lang }).value;
+                    }
+                    return hljs.highlightAuto(code).value;
+                },
+            });
+
+            // --- LaTeX rendering helper ---
+            // Processes a string: replaces $$...$$ with display math, $...$ with inline math
+            function renderLatex(html) {
+                // Display math: $$...$$  (handle both escaped \n and real newlines inside)
+                html = html.replace(
+                    /\$\$([\s\S]*?)\$\$/g,
+                    function (match, tex) {
+                        try {
+                            return katex.renderToString(tex.trim(), {
+                                displayMode: true,
+                                throwOnError: false,
+                            });
+                        } catch (e) {
+                            return match;
+                        }
+                    },
+                );
+
+                // Inline math: $...$ but not inside <code> or already rendered katex
+                // We split by HTML tags to avoid replacing inside <code>/<pre>
+                const parts = html.split(/(<[^>]+>)/);
+                let insideCode = false;
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (/^<(code|pre)/i.test(part)) insideCode = true;
+                    if (/^<\/(code|pre)/i.test(part)) insideCode = false;
+                    if (!insideCode && !part.startsWith("<")) {
+                        parts[i] = part.replace(
+                            /\$([^\$\n]+?)\$/g,
+                            function (m, tex) {
+                                try {
+                                    return katex.renderToString(tex.trim(), {
+                                        displayMode: false,
+                                        throwOnError: false,
+                                    });
+                                } catch (e) {
+                                    return m;
+                                }
+                            },
+                        );
+                    }
+                }
+                return parts.join("");
+            }
+
+            // Also handle \( ... \) and \[ ... \] delimiters
+            function renderLatexBrackets(html) {
+                // Display: \[...\]
+                html = html.replace(
+                    /\\\[([\s\S]*?)\\\]/g,
+                    function (match, tex) {
+                        try {
+                            return katex.renderToString(tex.trim(), {
+                                displayMode: true,
+                                throwOnError: false,
+                            });
+                        } catch (e) {
+                            return match;
+                        }
+                    },
+                );
+                // Inline: \(...\)
+                const parts = html.split(/(<[^>]+>)/);
+                let insideCode = false;
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (/^<(code|pre)/i.test(part)) insideCode = true;
+                    if (/^<\/(code|pre)/i.test(part)) insideCode = false;
+                    if (!insideCode && !part.startsWith("<")) {
+                        parts[i] = part.replace(
+                            /\\\(([\s\S]*?)\\\)/g,
+                            function (m, tex) {
+                                try {
+                                    return katex.renderToString(tex.trim(), {
+                                        displayMode: false,
+                                        throwOnError: false,
+                                    });
+                                } catch (e) {
+                                    return m;
+                                }
+                            },
+                        );
+                    }
+                }
+                return parts.join("");
+            }
+
+            function renderMarkdown(raw) {
+                // Protect LaTeX from marked's escaping:
+                // Temporarily replace $$ and $ blocks with placeholders
+                const latexBlocks = [];
+                let processed = raw;
+
+                // Protect display math $$...$$
+                processed = processed.replace(
+                    /\$\$([\s\S]*?)\$\$/g,
+                    function (m) {
+                        latexBlocks.push(m);
+                        return `%%LATEXBLOCK${latexBlocks.length - 1}%%`;
+                    },
+                );
+                // Protect \[...\]
+                processed = processed.replace(
+                    /\\\[([\s\S]*?)\\\]/g,
+                    function (m) {
+                        latexBlocks.push(m);
+                        return `%%LATEXBLOCK${latexBlocks.length - 1}%%`;
+                    },
+                );
+                // Protect inline \(...\)
+                processed = processed.replace(
+                    /\\\(([\s\S]*?)\\\)/g,
+                    function (m) {
+                        latexBlocks.push(m);
+                        return `%%LATEXBLOCK${latexBlocks.length - 1}%%`;
+                    },
+                );
+                // Protect inline $...$
+                processed = processed.replace(/\$([^\$\n]+?)\$/g, function (m) {
+                    latexBlocks.push(m);
+                    return `%%LATEXBLOCK${latexBlocks.length - 1}%%`;
+                });
+
+                // Run marked
+                let html = marked.parse(processed);
+
+                // Restore LaTeX placeholders
+                html = html.replace(/%%LATEXBLOCK(\d+)%%/g, function (m, idx) {
+                    return latexBlocks[parseInt(idx)];
+                });
+
+                // Now render LaTeX
+                html = renderLatex(html);
+                html = renderLatexBrackets(html);
+
+                return html;
+            }
+
+            // --- Floating kaomoji ---
             const kaomojis = [
                 "(´｡• ᵕ •｡`)",
                 "(˶ᵔ ᵕ ᵔ˶)",
@@ -400,6 +572,7 @@
                 floaters.appendChild(el);
             }
 
+            // --- Status kaomoji ---
             const statusKao = {
                 loading: ["(　˶′ᵕ‵˶)", "₍ᐢ.ˬ.ᐢ₎", "(˶ᵔ ᵕ ᵔ˶)"],
                 success: ["(ﾉ´ヮ`)ﾉ ~", "(≧◡≦)", "ヽ(>∀<)ノ"],
@@ -410,63 +583,7 @@
                 return arr[Math.floor(Math.random() * arr.length)];
             }
 
-            // Simple HTML-escape helper for fallback output
-            function escapeHtml(s) {
-                return String(s)
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;");
-            }
-
-            // Replace LaTeX math delimiters in raw markdown with KaTeX-rendered HTML.
-            // This runs before passing the string to marked so the KaTeX HTML is preserved.
-            // Supports display math with $$...$$ and inline math with $...$.
-            // It intentionally also processes math inside code blocks (per your request).
-            function renderMathToHTML(md) {
-                if (
-                    typeof katex === "undefined" ||
-                    typeof katex.renderToString !== "function"
-                ) {
-                    // KaTeX not available; return original markdown.
-                    return md;
-                }
-
-                // Render display math first ($$ ... $$)
-                md = md.replace(/\$\$([\s\S]+?)\$\$/g, function (_, tex) {
-                    try {
-                        return katex.renderToString(tex, {
-                            displayMode: true,
-                            throwOnError: false,
-                        });
-                    } catch (e) {
-                        return (
-                            '<pre class="katex-error">' +
-                            escapeHtml(tex) +
-                            "</pre>"
-                        );
-                    }
-                });
-
-                // Render inline math ($ ... $)
-                // Avoid matching a single $ alone or newlines inside inline math.
-                md = md.replace(/\$([^\$\n][^\$]*?)\$/g, function (_, tex) {
-                    try {
-                        return katex.renderToString(tex, {
-                            displayMode: false,
-                            throwOnError: false,
-                        });
-                    } catch (e) {
-                        return (
-                            '<code class="katex-error">' +
-                            escapeHtml(tex) +
-                            "</code>"
-                        );
-                    }
-                });
-
-                return md;
-            }
-
+            // --- Query logic ---
             async function submitQuery() {
                 const apiKey = document.getElementById("apiKey").value.trim();
                 const query = document.getElementById("query").value.trim();
@@ -510,9 +627,7 @@
 
                     const data = await res.json();
                     const raw = data.answer || JSON.stringify(data, null, 2);
-                    // Render LaTeX in the raw markdown to KaTeX HTML, then parse the markdown.
-                    const processed = renderMathToHTML(raw);
-                    content.innerHTML = marked.parse(processed);
+                    content.innerHTML = renderMarkdown(raw);
                 } catch (err) {
                     content.className = "result-content error";
                     content.textContent =
